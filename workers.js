@@ -2690,7 +2690,7 @@ const HTML_CONTENT = `
                 if (!url) continue;
                 if (/^(javascript:|vbscript:|data:|chrome:|edge:|about:|magnet:)/i.test(url)) continue;
                 const clean = cleanTitle(a.textContent);
-                links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: null, isPrivate: false });
+                links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: null, isPrivate: true });
             }
             return links;
         }
@@ -2727,7 +2727,7 @@ const HTML_CONTENT = `
                 if (!url || /^(javascript:|vbscript:|data:|chrome:|edge:|about:|magnet:)/i.test(url)) continue;
                 const clean = cleanTitle(a.textContent);
                 if (!categories['未分类']) categories['未分类'] = { isHidden: false, links: [] };
-                categories['未分类'].links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: '未分类', isPrivate: false });
+                categories['未分类'].links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: '未分类', isPrivate: true });
             }
         }
 
@@ -2760,6 +2760,16 @@ const HTML_CONTENT = `
                             // 本项目导出的 JSON 配置
                             data = JSON.parse(content);
                             if (typeof data !== 'object' || data === null) throw new Error("Invalid JSON");
+                        }
+                        // 导入的所有链接默认设为私密(仅登录可见)
+                        if (data && data.categories) {
+                            for (const catObj of Object.values(data.categories)) {
+                                if (catObj && Array.isArray(catObj.links)) {
+                                    for (const link of catObj.links) {
+                                        if (link) link.isPrivate = true;
+                                    }
+                                }
+                            }
                         }
                         const res = await fetchWithAuth("/api/importData", {
                             method: "POST",
@@ -3078,16 +3088,6 @@ export default {
 
         if (request.method === 'OPTIONS') {
             return new Response(null, { headers: corsHeaders });
-        }
-
-        if (url.pathname === '/__debug_env__') {
-            return new Response(JSON.stringify({
-                hasAdmin: typeof env.ADMIN_PASSWORD === 'string',
-                adminLen: env.ADMIN_PASSWORD ? env.ADMIN_PASSWORD.length : -1,
-                hasJwt: typeof env.JWT_SECRET === 'string',
-                jwtLen: env.JWT_SECRET ? env.JWT_SECRET.length : -1,
-                kvBound: typeof env.CARD_ORDER === 'object' && env.CARD_ORDER !== null
-            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
         if (url.pathname === '/api/icon') {
