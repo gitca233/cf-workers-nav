@@ -1008,7 +1008,7 @@ const HTML_CONTENT = `
             await customAlert('该分类已存在');
             return;
         }
-        categories[categoryName] = { isHidden: false, links: [] };
+        categories[categoryName] = { isHidden: false, isPrivate: false, links: [] };
         updateCategorySelect();
         renderCategories();
         setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 100);
@@ -1084,6 +1084,15 @@ const HTML_CONTENT = `
         await saveLinks();
     }
 
+    async function toggleCategoryPrivate(category, isPrivate) {
+        if (!await validateTokenOrRedirect()) return;
+        categories[category].isPrivate = isPrivate;
+        (categories[category].links || []).forEach(l => { l.isPrivate = isPrivate; });
+        renderCategories();
+        renderCategoryButtons();
+        await saveLinks();
+    }
+
     async function pinCategory(categoryName) {
         if (!await validateTokenOrRedirect()) return;
         const keys = Object.keys(categories);
@@ -1128,8 +1137,8 @@ const HTML_CONTENT = `
         const fragment = document.createDocumentFragment();
         const sourceCategories = searchMode && filteredCategories ? filteredCategories : categories;
 
-        Object.entries(sourceCategories).forEach(([category, { links, isHidden }]) => {
-            if (!isEditMode && !isLoggedIn && isHidden && !searchMode) return;
+        Object.entries(sourceCategories).forEach(([category, { links, isHidden, isPrivate }]) => {
+            if (!isEditMode && !isLoggedIn && (isHidden || isPrivate) && !searchMode) return;
 
             const section = document.createElement('div');
             section.className = 'section section-anchor';
@@ -1178,6 +1187,15 @@ const HTML_CONTENT = `
                             <input type="checkbox" data-action="toggleHidden" data-category="\${escAttr(category)}" \${isHidden ? 'checked' : ''} 
                                 class="sr-only peer">
                             <div class="w-3.5 h-3.5 rounded-full border-2 border-slate-400 peer-focus:outline-none peer dark:border-slate-500 peer-checked:bg-slate-500 peer-checked:border-slate-500 transition-colors"></div>
+                        </label>
+                    </div>
+
+                    <!-- 私密开关 -->
+                    <div class="flex items-center justify-center w-8 h-8 has-tooltip cursor-pointer" data-tooltip="\${isPrivate ? '设为公开分类' : '设为私密分类'}">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" data-action="togglePrivate" data-category="\${escAttr(category)}" \${isPrivate ? 'checked' : ''} 
+                                class="sr-only peer">
+                            <div class="w-3.5 h-3.5 rounded-full border-2 border-amber-400 peer-focus:outline-none peer dark:border-amber-500 peer-checked:bg-amber-400 peer-checked:border-amber-400 transition-colors"></div>
                         </label>
                     </div>
 
@@ -1272,7 +1290,8 @@ const HTML_CONTENT = `
         container.innerHTML = '';
         const visibleCategories = Object.keys(categories).filter(c => 
             (categories[c].links || []).some(l => !l.isPrivate || isLoggedIn) && 
-            (!categories[c].isHidden || isEditMode || isLoggedIn)
+            (!categories[c].isHidden || isEditMode || isLoggedIn) &&
+            (!categories[c].isPrivate || isLoggedIn)
         );
 
         if (visibleCategories.length === 0) return;
@@ -1776,11 +1795,16 @@ const HTML_CONTENT = `
             }
         });
         container.addEventListener('change', (e) => {
-            const input = e.target.closest('[data-action="toggleHidden"]');
+            const input = e.target.closest('[data-action="toggleHidden"], [data-action="togglePrivate"]');
             if (!input) return;
             const tipBox = input.closest('.has-tooltip');
-            if (tipBox) tipBox.setAttribute('data-tooltip', input.checked ? '显示分类' : '隐藏分类');
-            toggleCategoryHidden(input.dataset.category, input.checked);
+            const isPrivate = input.dataset.action === 'togglePrivate';
+            if (tipBox) tipBox.setAttribute('data-tooltip', input.checked ? (isPrivate ? '设为公开分类' : '显示分类') : (isPrivate ? '设为私密分类' : '隐藏分类'));
+            if (isPrivate) {
+                toggleCategoryPrivate(input.dataset.category, input.checked);
+            } else {
+                toggleCategoryHidden(input.dataset.category, input.checked);
+            }
         });
     }
     
@@ -1887,7 +1911,7 @@ const HTML_CONTENT = `
                      categories[cat].links.splice(idx, 1);
                      
                      if(!categories[updatedLink.category]) {
-                         categories[updatedLink.category] = { isHidden:false, links:[] };
+                         categories[updatedLink.category] = { isHidden:false, isPrivate:false, links:[] };
                      }
                      categories[updatedLink.category].links.push(updatedLink);
                  }
@@ -1897,7 +1921,7 @@ const HTML_CONTENT = `
         
         if (!found) {
              if(!categories[updatedLink.category]) {
-                 categories[updatedLink.category] = { isHidden:false, links:[] };
+                 categories[updatedLink.category] = { isHidden:false, isPrivate:false, links:[] };
              }
              oldCategory = updatedLink.category;
              categories[updatedLink.category].links.push(updatedLink);
@@ -2254,7 +2278,7 @@ const HTML_CONTENT = `
         sections.forEach(sec => {
             const catName = sec.id;
             const oldCat = categories[catName];
-            newCategories[catName] = { isHidden: oldCat ? oldCat.isHidden : false, links: [] };
+            newCategories[catName] = { isHidden: oldCat ? oldCat.isHidden : false, isPrivate: oldCat ? oldCat.isPrivate : false, links: [] };
             
             const cards = sec.querySelectorAll('.card');
             cards.forEach(c => {
@@ -2706,7 +2730,7 @@ const HTML_CONTENT = `
             }
             const links = getLinks(dl);
             if (catName && links.length) {
-                if (!categories[catName]) categories[catName] = { isHidden: false, links: [] };
+                if (!categories[catName]) categories[catName] = { isHidden: false, isPrivate: false, links: [] };
                 links.forEach(l => { l.category = catName; categories[catName].links.push(l); });
             }
         }
@@ -2726,7 +2750,7 @@ const HTML_CONTENT = `
                 const url = (a.getAttribute('href') || '').trim();
                 if (!url || /^(javascript:|vbscript:|data:|chrome:|edge:|about:|magnet:)/i.test(url)) continue;
                 const clean = cleanTitle(a.textContent);
-                if (!categories['未分类']) categories['未分类'] = { isHidden: false, links: [] };
+                if (!categories['未分类']) categories['未分类'] = { isHidden: false, isPrivate: false, links: [] };
                 categories['未分类'].links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: '未分类', isPrivate: true });
             }
         }
@@ -2902,7 +2926,7 @@ async function validateServerToken(authHeader, env) {
 function normalizeCategories(categories) {
     for (const key in categories) {
         if (Array.isArray(categories[key])) {
-            categories[key] = { isHidden: false, links: categories[key] };
+            categories[key] = { isHidden: false, isPrivate: false, links: categories[key] };
         }
     }
     return categories;
@@ -3249,7 +3273,7 @@ export default {
                 const filteredCategories = {};
                 for (const cat in normalizedCategories) {
                     const catData = normalizedCategories[cat];
-                    if (!catData.isHidden) {
+                    if (!catData.isHidden && !catData.isPrivate) {
                         const publicLinks = (catData.links || []).filter(l => !l.isPrivate);
                         if (publicLinks.length > 0) {
                             filteredCategories[cat] = { ...catData, links: publicLinks };
