@@ -1,0 +1,7 @@
+name = "nav"
+main = "workers.js"
+compatibility_date = "2024-12-01"
+
+[[kv_namespaces]]
+binding = "CARD_ORDER"
+id = "655a9330a4344bcba1627141a6e75439"

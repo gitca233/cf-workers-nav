@@ -3080,6 +3080,16 @@ export default {
             return new Response(null, { headers: corsHeaders });
         }
 
+        if (url.pathname === '/__debug_env__') {
+            return new Response(JSON.stringify({
+                hasAdmin: typeof env.ADMIN_PASSWORD === 'string',
+                adminLen: env.ADMIN_PASSWORD ? env.ADMIN_PASSWORD.length : -1,
+                hasJwt: typeof env.JWT_SECRET === 'string',
+                jwtLen: env.JWT_SECRET ? env.JWT_SECRET.length : -1,
+                kvBound: typeof env.CARD_ORDER === 'object' && env.CARD_ORDER !== null
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
         if (url.pathname === '/api/icon') {
             return handleIconProxy(request, ctx);
         }
