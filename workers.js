@@ -706,6 +706,10 @@ const HTML_CONTENT = `
         loadSections();
     }
 
+    function isCompactActive() {
+        return isCompact && !isEditMode;
+    }
+
     function toggleCompactMode() {
         isCompact = !isCompact;
         localStorage.setItem('compactMode', isCompact);
@@ -713,7 +717,7 @@ const HTML_CONTENT = `
         const checkbox = document.getElementById('compact-switch-checkbox');
         if (checkbox) checkbox.checked = isCompact;
 
-        document.body.classList.toggle('compact-mode', isCompact);
+        document.body.classList.toggle('compact-mode', isCompactActive());
         loadSections();
     }
 
@@ -804,7 +808,7 @@ const HTML_CONTENT = `
     document.addEventListener('DOMContentLoaded', async () => {
         const loadingMask = document.getElementById('loading-mask');
         if (loadingMask) loadingMask.classList.remove('hidden');
-        document.body.classList.toggle('compact-mode', isCompact);
+        document.body.classList.toggle('compact-mode', isCompactActive());
         initializeUIComponents();
         renderSearchEngineMenu();
         await checkLoginStatusAndLoad();
@@ -1274,10 +1278,10 @@ const HTML_CONTENT = `
             // 根据布局模式调整 Grid 列数
             // APP 模式下，手机端一行4个，平板6个，大屏8-10个
             const gridClasses = isAppLayout 
-                ? (isCompact
+                ? (isCompactActive()
                     ? 'grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-x-1 gap-y-3'
                     : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-x-2 gap-y-6')
-                : (isCompact
+                : (isCompactActive()
                     ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2'
                     : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4');
             
@@ -1333,6 +1337,7 @@ const HTML_CONTENT = `
     }
 
     function renderCategories() {
+        document.body.classList.toggle('compact-mode', isCompactActive());
         renderCategorySections({ renderButtons: false });
     } 
 
@@ -1614,7 +1619,7 @@ const HTML_CONTENT = `
         
         let cardBaseClass = isAppLayout 
             ? 'flex flex-col items-center justify-start py-1 gap-1.5 hover:z-10' 
-            : 'flex flex-col ' + (isCompact ? 'p-2' : 'p-4') + ' bg-white/90 dark:bg-[#1e293b]/60 backdrop-blur-sm bg-white/80 border border-gray-200 dark:border-slate-700/50 hover:border-emerald-500/50 dark:hover:border-emerald-400/50 shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
+            : 'flex flex-col ' + (isCompactActive() ? 'p-2' : 'p-4') + ' bg-white/90 dark:bg-[#1e293b]/60 backdrop-blur-sm bg-white/80 border border-gray-200 dark:border-slate-700/50 hover:border-emerald-500/50 dark:hover:border-emerald-400/50 shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
             
         if (link.isPrivate && !isAppLayout) {
             cardBaseClass += ' ring-1 ring-amber-400/40 bg-amber-50/80 dark:bg-amber-900/10 !border-amber-200 dark:!border-amber-700/50';
@@ -1717,7 +1722,7 @@ const HTML_CONTENT = `
 
         card.appendChild(header);
 
-        if (!isAppLayout && !isCompact) {
+        if (!isAppLayout && !isCompactActive()) {
             const desc = document.createElement('div');
             desc.className = 'text-xs text-slate-500 dark:text-slate-400 line-clamp-2 min-h-[1.25rem] card-tip leading-relaxed pointer-events-none w-full';
             desc.textContent = link.tips || '';
