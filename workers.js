@@ -314,6 +314,23 @@ const HTML_CONTENT = `
                                     <div class="px-3 py-2.5 flex items-center justify-between text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg group">
                                         <span class="flex items-center gap-3">
                                             <svg class="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M4 6h16M4 12h16M4 18h16"></path>
+                                            </svg>
+                                            紧凑模式
+                                        </span>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="compact-switch-checkbox" onchange="toggleCompactMode()" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
+                                        </label>
+                                    </div>
+                                    <button id="refresh-icons-btn" onclick="refreshAllIcons()" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-3 font-medium">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                        刷新所有网站图标
+                                    </button>
+                                    
+                                    <div class="px-3 py-2.5 flex items-center justify-between text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg group">
+                                        <span class="flex items-center gap-3">
+                                            <svg class="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect>
                                                 <rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>
                                             </svg>
@@ -505,9 +522,13 @@ const HTML_CONTENT = `
     </div>
 
     <script>
+    window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = ''; });
+    window.onbeforeunload = function() { return ''; };
+
     let isEditMode = false;
     let isLoggedIn = false;
     let isAppLayout = localStorage.getItem('appLayout') === 'true';
+    let isCompact = localStorage.getItem('compactMode') === 'true';
 
     let editCardMode = false;
     let isEditCategoryMode = false;
@@ -685,6 +706,38 @@ const HTML_CONTENT = `
         loadSections();
     }
 
+    function toggleCompactMode() {
+        isCompact = !isCompact;
+        localStorage.setItem('compactMode', isCompact);
+
+        const checkbox = document.getElementById('compact-switch-checkbox');
+        if (checkbox) checkbox.checked = isCompact;
+
+        document.body.classList.toggle('compact-mode', isCompact);
+        loadSections();
+    }
+
+    function refreshAllIcons() {
+        const imgs = Array.prototype.slice.call(document.querySelectorAll('[data-url] img[src*="/api/icon"]'));
+        if (imgs.length === 0) { alert('没有可刷新的默认图标（自定义图标不会刷新）'); return; }
+
+        const stamp = Date.now();
+        imgs.forEach((img) => {
+            try {
+                const u = new URL(img.getAttribute('src'), location.origin);
+                u.searchParams.set('v', stamp);
+                img.classList.remove('opacity-100');
+                img.classList.add('opacity-0');
+                img.onload = function() {
+                    this.classList.add('opacity-100');
+                    this.classList.remove('opacity-0');
+                };
+                img.onerror = function() { this.classList.add('opacity-100'); this.classList.remove('opacity-0'); };
+                img.src = u.toString();
+            } catch (e) {}
+        });
+    }
+
     function logAction(action, details) {
         console.log(\`\${new Date().toISOString()}: \${action} - \`, details);
     }
@@ -751,6 +804,7 @@ const HTML_CONTENT = `
     document.addEventListener('DOMContentLoaded', async () => {
         const loadingMask = document.getElementById('loading-mask');
         if (loadingMask) loadingMask.classList.remove('hidden');
+        document.body.classList.toggle('compact-mode', isCompact);
         initializeUIComponents();
         renderSearchEngineMenu();
         await checkLoginStatusAndLoad();
@@ -777,6 +831,7 @@ const HTML_CONTENT = `
         const elements = {
             themeSwitchCheckbox: document.getElementById('theme-switch-checkbox'),
             layoutSwitchCheckbox: document.getElementById('layout-switch-checkbox'),
+            compactSwitchCheckbox: document.getElementById('compact-switch-checkbox'),
             savePrefCheckbox: document.getElementById('save-preference-checkbox'),
             searchButton: document.getElementById('search-button'),
             searchInput: document.getElementById('search-input'),
@@ -801,6 +856,10 @@ const HTML_CONTENT = `
 
         if(elements.layoutSwitchCheckbox) {
             elements.layoutSwitchCheckbox.checked = isAppLayout;
+        }
+
+        if(elements.compactSwitchCheckbox) {
+            elements.compactSwitchCheckbox.checked = isCompact;
         }
         
         const savedPref = localStorage.getItem('savePreferences') === 'true';
@@ -917,11 +976,6 @@ const HTML_CONTENT = `
         setupScrollSpy();
         
         setupTooltipDelegation();
-
-        window.addEventListener('beforeunload', (e) => {
-            e.preventDefault();
-            e.returnValue = '';
-        });
     }
 
     function selectSearchEngine(value, label) {
@@ -1220,8 +1274,12 @@ const HTML_CONTENT = `
             // 根据布局模式调整 Grid 列数
             // APP 模式下，手机端一行4个，平板6个，大屏8-10个
             const gridClasses = isAppLayout 
-                ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-x-2 gap-y-6' 
-                : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
+                ? (isCompact
+                    ? 'grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-x-1 gap-y-3'
+                    : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-x-2 gap-y-6')
+                : (isCompact
+                    ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2'
+                    : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4');
             
             cardContainer.className = \`grid \${gridClasses} card-container relative\`;
             cardContainer.id = 'grid-' + category; // 与 section.id 区分，避免同页面 id 重复
@@ -1556,7 +1614,7 @@ const HTML_CONTENT = `
         
         let cardBaseClass = isAppLayout 
             ? 'flex flex-col items-center justify-start py-1 gap-1.5 hover:z-10' 
-            : 'flex flex-col p-4 bg-white/90 dark:bg-[#1e293b]/60 backdrop-blur-sm bg-white/80 border border-gray-200 dark:border-slate-700/50 hover:border-emerald-500/50 dark:hover:border-emerald-400/50 shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
+            : 'flex flex-col ' + (isCompact ? 'p-2' : 'p-4') + ' bg-white/90 dark:bg-[#1e293b]/60 backdrop-blur-sm bg-white/80 border border-gray-200 dark:border-slate-700/50 hover:border-emerald-500/50 dark:hover:border-emerald-400/50 shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
             
         if (link.isPrivate && !isAppLayout) {
             cardBaseClass += ' ring-1 ring-amber-400/40 bg-amber-50/80 dark:bg-amber-900/10 !border-amber-200 dark:!border-amber-700/50';
@@ -1659,7 +1717,7 @@ const HTML_CONTENT = `
 
         card.appendChild(header);
 
-        if (!isAppLayout) {
+        if (!isAppLayout && !isCompact) {
             const desc = document.createElement('div');
             desc.className = 'text-xs text-slate-500 dark:text-slate-400 line-clamp-2 min-h-[1.25rem] card-tip leading-relaxed pointer-events-none w-full';
             desc.textContent = link.tips || '';
