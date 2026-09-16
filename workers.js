@@ -2479,15 +2479,21 @@ const HTML_CONTENT = `
         });
     }
 
-    function customConfirm(msg) {
+    function customConfirm(msg, okText = '确定', cancelText = '取消') {
         return new Promise(resolve => {
             toggleOverlay('custom-confirm-overlay', true);
             document.getElementById('custom-confirm-message').innerText = msg;
+            const okBtn = document.getElementById('custom-confirm-ok');
+            const cancelBtn = document.getElementById('custom-confirm-cancel');
+            okBtn.innerText = okText;
+            cancelBtn.innerText = cancelText;
             
             const close = (val) => {
                 toggleOverlay('custom-confirm-overlay', false);
                 document.getElementById('custom-confirm-ok').onclick = null;
                 document.getElementById('custom-confirm-cancel').onclick = null;
+                okBtn.innerText = '确定';
+                cancelBtn.innerText = '取消';
                 resolve(val);
             };
             document.getElementById('custom-confirm-ok').onclick = () => close(true);
@@ -2758,9 +2764,35 @@ const HTML_CONTENT = `
         return Object.keys(categories).length ? { categories } : null;
     }
 
+    // 合并导入：以现有数据为基础，导入新分类/链接（同名分类合并、按 URL 去重）
+    function mergeImportData(currentCats, importedData) {
+        const merged = {};
+        Object.keys(currentCats).forEach(key => {
+            const cat = currentCats[key];
+            merged[key] = {
+                isHidden: !!cat.isHidden,
+                isPrivate: !!cat.isPrivate,
+                links: Array.isArray(cat.links) ? cat.links.slice() : []
+            };
+        });
+
+        const importedCats = (importedData && importedData.categories) || {};
+        Object.keys(importedCats).forEach(catName => {
+            const importedLinks = (importedCats[catName] && importedCats[catName].links) || [];
+            if (!merged[catName]) merged[catName] = { isHidden: false, isPrivate: false, links: [] };
+            const existingUrls = new Set(merged[catName].links.map(l => l.url));
+            importedLinks.forEach(link => {
+                if (link && link.url && !existingUrls.has(link.url)) {
+                    merged[catName].links.push({ ...link, category: catName, isPrivate: true });
+                    existingUrls.add(link.url);
+                }
+            });
+        });
+        return merged;
+    }
+
     async function importData() {
         if(!await validateTokenOrRedirect()) return;
-        if(!await customConfirm("确定要导入数据吗？导入将覆盖现有数据！")) return;
         
         const fileInput = document.getElementById('import-file-input');
         fileInput.value = '';
@@ -2795,12 +2827,21 @@ const HTML_CONTENT = `
                                 }
                             }
                         }
+                        // 选择导入方式：合并 or 覆盖
+                        const mergeMode = await customConfirm(
+                            '请选择导入方式：\n\n【合并】保留现有分类与链接，导入内容追加进去（同名分类按 URL 去重合并）\n\n【覆盖】清空现有全部数据，仅保留本次导入内容',
+                            '合并导入', '覆盖导入'
+                        );
+                        let payload = data;
+                        if (mergeMode) {
+                            payload = { categories: mergeImportData(categories, data) };
+                        }
                         const res = await fetchWithAuth("/api/importData", {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json"
                             },
-                            body: JSON.stringify(data)
+                            body: JSON.stringify(payload)
                         });
                         if (res.status === 401) {
                             logout();
