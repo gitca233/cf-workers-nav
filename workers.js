@@ -1639,13 +1639,13 @@ const HTML_CONTENT = `
         const header = document.createElement('div');
         header.className = isAppLayout 
             ? 'flex flex-col items-center justify-center w-full relative' 
-            : 'flex items-center gap-3 mb-2.5 w-full';
+            : 'flex items-center gap-3 ' + (isCompactActive() ? 'mb-1.5' : 'mb-2.5') + ' w-full';
         
         // 图标占位容器：图标加载完成前显示 spinner
         const iconWrap = document.createElement('div');
         const iconWrapClass = isAppLayout
             ? 'relative w-14 h-14 sm:w-16 sm:h-16'
-            : 'relative w-9 h-9';
+            : (isCompactActive() ? 'relative w-7 h-7' : 'relative w-9 h-9');
         iconWrap.className = iconWrapClass;
 
         // 加载中的 spinner（居中，位于图标底层）
@@ -1656,8 +1656,8 @@ const HTML_CONTENT = `
         const icon = document.createElement('img');
         icon.setAttribute('loading', 'lazy'); 
         icon.setAttribute('decoding', 'async'); 
-        icon.setAttribute('width', isAppLayout ? 64 : 36); 
-        icon.setAttribute('height', isAppLayout ? 64 : 36);
+        icon.setAttribute('width', isAppLayout ? 64 : (isCompactActive() ? 28 : 36)); 
+        icon.setAttribute('height', isAppLayout ? 64 : (isCompactActive() ? 28 : 36));
         
         // 图标样式
         let iconClass = 'relative w-full h-full opacity-0 transition duration-300';
@@ -1706,7 +1706,7 @@ const HTML_CONTENT = `
         const title = document.createElement('div');
         const titleAlign = isAppLayout 
             ? 'text-center text-xs sm:text-sm font-medium mt-1 w-[120%] truncate px-1 text-slate-700 dark:text-slate-200 drop-shadow-sm' 
-            : 'font-semibold text-sm flex-1 truncate text-slate-700 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors pointer-events-none';
+            : 'font-semibold ' + (isCompactActive() ? 'text-xs' : 'text-sm') + ' flex-1 truncate text-slate-700 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors pointer-events-none';
         
         title.className = \`card-title pointer-events-none \${titleAlign}\`;
         title.textContent = link.name;
