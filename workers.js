@@ -1279,10 +1279,10 @@ const HTML_CONTENT = `
             // APP 模式下，手机端一行4个，平板6个，大屏8-10个
             const gridClasses = isAppLayout 
                 ? (isCompactActive()
-                    ? 'grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-x-1 gap-y-3'
+                    ? 'grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-x-1 gap-y-2'
                     : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-x-2 gap-y-6')
                 : (isCompactActive()
-                    ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2'
+                    ? 'grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-x-2 gap-y-1.5'
                     : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4');
             
             cardContainer.className = \`grid \${gridClasses} card-container relative\`;
@@ -1619,7 +1619,7 @@ const HTML_CONTENT = `
         
         let cardBaseClass = isAppLayout 
             ? 'flex flex-col items-center justify-start py-1 gap-1.5 hover:z-10' 
-            : 'flex flex-col ' + (isCompactActive() ? 'p-2' : 'p-4') + ' bg-white/90 dark:bg-[#1e293b]/60 backdrop-blur-sm bg-white/80 border border-gray-200 dark:border-slate-700/50 hover:border-emerald-500/50 dark:hover:border-emerald-400/50 shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
+            : 'flex flex-col ' + (isCompactActive() ? 'px-2 py-1.5' : 'p-4') + ' bg-white/90 dark:bg-[#1e293b]/60 backdrop-blur-sm bg-white/80 border border-gray-200 dark:border-slate-700/50 hover:border-emerald-500/50 dark:hover:border-emerald-400/50 shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
             
         if (link.isPrivate && !isAppLayout) {
             cardBaseClass += ' ring-1 ring-amber-400/40 bg-amber-50/80 dark:bg-amber-900/10 !border-amber-200 dark:!border-amber-700/50';
@@ -1639,7 +1639,7 @@ const HTML_CONTENT = `
         const header = document.createElement('div');
         header.className = isAppLayout 
             ? 'flex flex-col items-center justify-center w-full relative' 
-            : 'flex items-center gap-3 ' + (isCompactActive() ? 'mb-1.5' : 'mb-2.5') + ' w-full';
+            : 'flex items-center gap-2.5 ' + (isCompactActive() ? 'mb-0.5' : 'mb-2.5') + ' w-full';
         
         // 图标占位容器：图标加载完成前显示 spinner
         const iconWrap = document.createElement('div');
@@ -1706,7 +1706,7 @@ const HTML_CONTENT = `
         const title = document.createElement('div');
         const titleAlign = isAppLayout 
             ? 'text-center text-xs sm:text-sm font-medium mt-1 w-[120%] truncate px-1 text-slate-700 dark:text-slate-200 drop-shadow-sm' 
-            : 'font-semibold ' + (isCompactActive() ? 'text-xs' : 'text-sm') + ' flex-1 truncate text-slate-700 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors pointer-events-none';
+            : 'font-semibold text-sm flex-1 truncate text-slate-700 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors pointer-events-none';
         
         title.className = \`card-title pointer-events-none \${titleAlign}\`;
         title.textContent = link.name;
