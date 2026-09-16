@@ -917,6 +917,11 @@ const HTML_CONTENT = `
         setupScrollSpy();
         
         setupTooltipDelegation();
+
+        window.addEventListener('beforeunload', (e) => {
+            e.preventDefault();
+            e.returnValue = '';
+        });
     }
 
     function selectSearchEngine(value, label) {
