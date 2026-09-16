@@ -447,7 +447,8 @@ const HTML_CONTENT = `
             </div>
             <h3 class="text-xl font-bold mb-2 text-slate-800 dark:text-white">身份验证</h3>
             <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">请输入管理员密码以继续操作</p>
-            <input type="password" id="password-input" placeholder="访问密码" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none mb-6 dark:text-white text-center tracking-widest text-lg transition-all">
+            <input type="password" id="password-input" placeholder="访问密码" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none mb-4 dark:text-white text-center tracking-widest text-lg transition-all">
+            <input type="text" id="totp-input" placeholder="6位动态验证码（若已启用双因素）" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none mb-6 dark:text-white text-center tracking-widest text-lg transition-all">
             <div class="flex gap-3">
                 <button id="password-cancel-btn" class="flex-1 py-2.5 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 font-medium transition-colors">取消</button>
                 <button id="password-confirm-btn" class="flex-1 py-2.5 rounded-xl text-white bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25 font-medium transition-colors">确认登录</button>
@@ -2342,6 +2343,7 @@ const HTML_CONTENT = `
     async function toggleLogin() {
         if (!isLoggedIn) {
              toggleOverlay('password-dialog-overlay', true);
+             document.getElementById('totp-input').value = '';
              document.getElementById('password-input').focus();
         } else {
              if (await customConfirm('确定退出登录吗？')) {
@@ -2399,7 +2401,7 @@ const HTML_CONTENT = `
              const res = await fetch('/api/login', {
                  method: 'POST',
                  headers: {'Content-Type': 'application/json'},
-                 body: JSON.stringify({password: pwd})
+                 body: JSON.stringify({password: pwd, totp: document.getElementById('totp-input').value})
              });
              const data = await res.json();
              if(data.valid) {
@@ -2411,9 +2413,9 @@ const HTML_CONTENT = `
              } else if (res.status === 429 && data.locked) {
                  await customAlertRateLimit(data.retryAfter || 900);
              } else {
-                 var remMsg = '密码错误';
+                 var remMsg = (data && data.message) ? data.message : '密码错误';
                  var remaining = typeof data.remaining === 'number' ? data.remaining : 0;
-                 if (remaining > 0) remMsg = '密码错误，还可尝试 ' + remaining + ' 次';
+                 if (!(data && data.message) && remaining > 0) remMsg = '密码错误，还可尝试 ' + remaining + ' 次';
                  await customAlert(remMsg);
              }
          } catch(e) { await customAlert('Login Error'); }
@@ -3140,6 +3142,46 @@ async function handleSmartBackup(env, currentData) {
     }
 }
 
+async function base32ToBytes(secret) {
+    const TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    const clean = secret.toUpperCase().replace(/[\s=]/g, '');
+    const bytes = [];
+    let buf = 0, bits = 0;
+    for (const ch of clean) {
+        const idx = TABLE.indexOf(ch);
+        if (idx === -1) return null;
+        buf = (buf << 5) | idx;
+        bits += 5;
+        if (bits >= 8) { bytes.push((buf >>> (bits - 8)) & 0xff); bits -= 8; }
+    }
+    return new Uint8Array(bytes);
+}
+
+async function totpCode(secret, counter) {
+    const key = await base32ToBytes(secret);
+    if (!key) return null;
+    const buf = new Uint8Array(8);
+    let v = Math.floor(counter);
+    for (let i = 7; i >= 0; i--) { buf[i] = v & 0xff; v = Math.floor(v / 256); }
+    const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, buf));
+    const offset = sig[sig.length - 1] & 0x0f;
+    const code = ((sig[offset] & 0x7f) << 24) | (sig[offset + 1] << 16) | (sig[offset + 2] << 8) | sig[offset + 3];
+    return (code % 1000000).toString().padStart(6, '0');
+}
+
+async function verifyTotp(secret, code) {
+    if (!secret || !code) return false;
+    const c = String(code).trim();
+    if (!/^\d{6}$/.test(c)) return false;
+    const now = Math.floor(Date.now() / 1000);
+    for (let dt = -1; dt <= 1; dt++) {
+        const expected = await totpCode(secret, Math.floor(now / 30) + dt);
+        if (expected && expected === c) return true;
+    }
+    return false;
+}
+
 function jsonResp(data, status = 200) {
     return new Response(JSON.stringify(data), {
         status,
@@ -3199,7 +3241,7 @@ export default {
                     return new Response(JSON.stringify({ valid: false, locked: true, remaining: 0, retryAfter: waitSec }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
                 }
 
-                const { password } = await request.json();
+                const { password, totp } = await request.json();
                 if (password !== env.ADMIN_PASSWORD) {
                     const newAttempts = attempts + 1;
                     const newExpiredAt = Date.now() + LOCK_MS;
@@ -3211,6 +3253,14 @@ export default {
                     return new Response(JSON.stringify({ valid: false, remaining }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
                 }
                 await env.CARD_ORDER.delete(rateLimitKey);
+
+                if (env.TOTP_SECRET) {
+                    const totpOk = await verifyTotp(env.TOTP_SECRET, totp);
+                    if (!totpOk) {
+                        const remaining = Math.max(0, MAX_ATTEMPTS - attempts);
+                        return new Response(JSON.stringify({ valid: false, error: 'INVALID_TOTP', message: '两步验证码错误', remaining }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                    }
+                }
 
                 const currentTime = Math.floor(Date.now() / 1000);
 
