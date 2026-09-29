@@ -458,7 +458,7 @@ const HTML_CONTENT = `
             try {
                 var _pf = (new URLSearchParams(location.search).get('perf') || '').toLowerCase();
                 if (_pf) {
-                    var _flags = _pf.split(/[,+\s]+/).filter(Boolean);
+                    var _flags = _pf.split(/[,+\\s]+/).filter(Boolean);
                     var _css = {
                         noimg: 'img{display:none !important}',
                         noshadow: '*{box-shadow:none !important}',
@@ -466,9 +466,11 @@ const HTML_CONTENT = `
                         noblob: '.glass-blob{display:none !important}',
                         nograd: '*{background-image:none !important}',
                         nofont: '*,*:before,*:after{font-family:sans-serif !important}',
-                        nobg: '*{background-color:#fff !important}html.dark *{background-color:#0f172a !important}'
+                        nobg: '*{background-color:#fff !important}html.dark *{background-color:#0f172a !important}',
+                        nobglayer: '#bg-layer{display:none !important}'
                     };
                     var _on = [];
+                    var _extra = [];
                     for (var _i = 0; _i < _flags.length; _i++) {
                         var _f = _flags[_i];
                         if (_f === 'plain') { _on.push('plain'); continue; }
@@ -477,6 +479,7 @@ const HTML_CONTENT = `
                             _on.push(_f);
                             continue;
                         }
+                        if (_f === 'nocards') { _extra.push('nocards'); continue; }
                         if (_css[_f]) _on.push(_f);
                     }
                     var _text = '';
@@ -494,8 +497,21 @@ const HTML_CONTENT = `
                     document.addEventListener('DOMContentLoaded', function () {
                         var _b = document.createElement('div');
                         _b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#000;color:#4f4;font:12px/1.5 monospace;padding:5px 9px;border-radius:6px;pointer-events:none';
-                        _b.textContent = 'perf 已生效: ' + _on.join(',');
+                        _b.textContent = 'perf 已生效: ' + _on.concat(_extra).join(',');
                         document.body.appendChild(_b);
+                        // nocards：渲染完成后真正清空内容并移除图片，释放解码内存
+                        // （img{display:none} 并不阻止下载与解码，单独用它测不出图片开销）
+                        if (_extra.indexOf('nocards') >= 0) {
+                            // 页面渲染是异步的，反复清空几秒，确保内容与图片真正释放
+                            var _n = 0;
+                            var _t = setInterval(function () {
+                                var _sc = document.getElementById('sections-container');
+                                if (_sc && _sc.firstChild) _sc.innerHTML = '';
+                                var _im = document.querySelectorAll('img');
+                                for (var _x = 0; _x < _im.length; _x++) _im[_x].remove();
+                                if (++_n > 25) clearInterval(_t);
+                            }, 200);
+                        }
                     });
                 }
             } catch (e) { /* 忽略 */ }
@@ -548,7 +564,7 @@ const HTML_CONTENT = `
 <body class="min-h-screen font-sans text-base-foreground transition-colors duration-300">
     
     <!-- 背景层 -->
-    <div class="fixed inset-0 -z-10 h-full w-full overflow-hidden bg-base dark:bg-base">
+    <div id="bg-layer" class="fixed inset-0 -z-10 h-full w-full overflow-hidden bg-base dark:bg-base">
         <!-- <div class="absolute inset-0 bg-gradient-to-br from-[var(--background)] to-[var(--secondary)] dark:from-[var(--background)] dark:to-[var(--card)]"></div> -->
         <div class="glass-blob absolute top-[-5%] left-[-10%] w-[800px] h-[800px] bg-[color-mix(in_oklab,color-mix(in_oklab,var(--primary)_45%,var(--background))_30%,transparent)] dark:bg-[color-mix(in_oklab,color-mix(in_oklab,var(--primary)_25%,var(--background))_30%,transparent)] rounded-full blur-[120px]"></div>
         <div class="glass-blob glass-blob-2 absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-300/30 dark:bg-purple-600/20 rounded-full blur-[120px]"></div>
