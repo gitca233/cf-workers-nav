@@ -1,4 +1,3 @@
-// [实验] 触发一次部署以验证绑定持久性（验证结束后删除）
 const HTML_CONTENT = `
 <!DOCTYPE html>
 <html lang="zh-CN" class="scroll-smooth">
