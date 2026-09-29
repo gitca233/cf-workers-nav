@@ -4221,7 +4221,10 @@ const HTML_CONTENT = `
                         if (stats.newCats) parts.push('新建分类 ' + stats.newCats + ' 个');
                         if (allSkipped.length) parts.push('无法导入 ' + allSkipped.length + ' 条');
                         await customAlert(parts.join('，') + '！');
-                        location.reload();
+                        // 原地重新拉取，而不是 location.reload()：
+                        // reload 会触发「关闭页面前确认」，用户一旦选择留在本页，
+                        // 界面就停留在导入前的旧数据上，看起来像导入失败（其实已存成功）
+                        await loadLinks(true);
                     } catch (error) {
                         console.error("导入失败:", error);
                         const msg = String((error && error.message) || '');
