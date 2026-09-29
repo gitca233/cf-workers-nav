@@ -572,6 +572,18 @@ const HTML_CONTENT = `
                                             <div class="w-9 h-5 bg-[color-mix(in_oklab,var(--foreground)_35%,var(--card))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] peer-checked:bg-accent"></div>
                                         </label>
                                     </div>
+
+                                    <!-- 分类默认折叠 -->
+                                    <div class="px-3 py-2.5 flex items-center justify-between text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] rounded-lg group">
+                                        <span class="flex items-center gap-3">
+                                            <svg class="w-4 h-4 text-muted-foreground group-hover:text-muted-foreground dark:text-muted-foreground dark:group-hover:text-base-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
+                                            分类默认折叠
+                                        </span>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="default-collapse-checkbox" onchange="toggleDefaultCollapsed()" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-[color-mix(in_oklab,var(--foreground)_35%,var(--card))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] peer-checked:bg-accent"></div>
+                                        </label>
+                                    </div>
                                     
                                     <!-- 【新增】APP 布局切换 -->
                                     <div class="px-3 py-2.5 flex items-center justify-between text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] rounded-lg group">
@@ -896,6 +908,19 @@ const HTML_CONTENT = `
     let isLoggedIn = false;
     let isAppLayout = localStorage.getItem('appLayout') === 'true';
     let isCompact = localStorage.getItem('compactMode') === 'true';
+    let defaultCollapsed = localStorage.getItem('defaultCollapsed') === 'true';
+    // 分类折叠的会话/访客覆盖：localStorage 持久化，来源为浏览态点击标题
+    const collapsedOverrides = new Map();
+    (function loadCollapsedOverrides() {
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.indexOf('navCollapsed:') === 0) {
+                    collapsedOverrides.set(key.slice('navCollapsed:'.length), localStorage.getItem(key) === 'true');
+                }
+            }
+        } catch (e) {}
+    })();
 
     let editCardMode = false;
     let isEditCategoryMode = false;
@@ -1088,6 +1113,82 @@ const HTML_CONTENT = `
         loadSections();
     }
 
+    // —— 分类折叠/展开 ——
+    // 生效判定优先级：本次会话覆盖 > 分类自己显式设置(collapsed) > 全局默认(defaultCollapsed)
+    function isCategoryCollapsed(name) {
+        if (collapsedOverrides.has(name)) return collapsedOverrides.get(name);
+        const cat = categories[name];
+        if (cat && typeof cat.collapsed === 'boolean') return cat.collapsed;
+        return defaultCollapsed;
+    }
+
+    function persistCollapsedOverride(name, value) {
+        try { localStorage.setItem('navCollapsed:' + name, value ? 'true' : 'false'); } catch (e) {}
+    }
+
+    function clearCollapsedOverride(name) {
+        collapsedOverrides.delete(name);
+        try { localStorage.removeItem('navCollapsed:' + name); } catch (e) {}
+    }
+
+    // 就地更新单个分类的折叠外观（不整体重渲染，保住滚动位置）
+    function toggledState(name) {
+        const section = document.getElementById(sectionId(name));
+        if (!section) return;
+        const collapsed = isCategoryCollapsed(name);
+        const grid = section.querySelector('.card-container');
+        if (grid) grid.classList.toggle('hidden', collapsed);
+        const btn = section.querySelector('.cat-collapse-toggle');
+        if (btn) {
+            btn.setAttribute('aria-expanded', String(!collapsed));
+            const chevron = btn.querySelector('.cat-chevron');
+            if (chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : '';
+        }
+    }
+
+    function setCategoryCollapsed(name, collapsed) {
+        collapsedOverrides.set(name, collapsed);
+        persistCollapsedOverride(name, collapsed);
+        if (isEditMode && categories[name]) {
+            // 编辑态：点标题即视为「该分类默认折叠」，持久化到服务端
+            categories[name].collapsed = collapsed;
+            clearCollapsedOverride(name);
+            toggledState(name);
+            saveLinks();
+            return;
+        }
+        toggledState(name);
+    }
+
+    function toggleCategoryCollapsed(name) {
+        if (!categories[name]) return;
+        setCategoryCollapsed(name, !isCategoryCollapsed(name));
+    }
+
+    // 编辑态分类控件里的「默认折叠」设置
+    function setCategoryCollapsedSetting(name, collapsed) {
+        if (!categories[name]) return;
+        categories[name].collapsed = collapsed;
+        clearCollapsedOverride(name);
+        toggledState(name);
+        saveLinks();
+    }
+
+    // 全局默认：折叠 or 展开
+    function toggleDefaultCollapsed() {
+        defaultCollapsed = !defaultCollapsed;
+        try { localStorage.setItem('defaultCollapsed', String(defaultCollapsed)); } catch (e) {}
+        const checkbox = document.getElementById('default-collapse-checkbox');
+        if (checkbox) checkbox.checked = defaultCollapsed;
+        renderCategorySections({ renderButtons: true });
+    }
+
+    // 点击分类导航按钮跳转时，强制展开目标分类（仅本次会话，不改持久默认）
+    function expandForNavigation(name) {
+        collapsedOverrides.set(name, false);
+        toggledState(name);
+    }
+
     function refreshAllIcons() {
         const imgs = Array.prototype.slice.call(document.querySelectorAll('[data-url] img[src*="/api/icon"]'));
         if (imgs.length === 0) { alert('没有可刷新的默认图标（自定义图标不会刷新）'); return; }
@@ -1234,6 +1335,9 @@ const HTML_CONTENT = `
         if(elements.compactSwitchCheckbox) {
             elements.compactSwitchCheckbox.checked = isCompact;
         }
+
+        const defaultCollapseCheckbox = document.getElementById('default-collapse-checkbox');
+        if (defaultCollapseCheckbox) defaultCollapseCheckbox.checked = defaultCollapsed;
         
         const savedPref = localStorage.getItem('savePreferences') === 'true';
         elements.savePrefCheckbox.checked = savedPref;
@@ -1584,11 +1688,29 @@ const HTML_CONTENT = `
             const titleContainer = document.createElement('div');
             titleContainer.className = 'flex items-center gap-3 mb-5 pb-2 border-b border-[color-mix(in_oklab,var(--muted),var(--border))] dark:border-[color-mix(in_oklab,var(--muted)_70%,var(--border))]';
             
+            const isCollapsed = searchMode ? false : isCategoryCollapsed(category);
+
             const title = document.createElement('h2');
             title.className = 'text-lg font-bold text-base-foreground flex items-center gap-2';
             const badge = document.createElement('span');
             badge.className = 'w-1.5 h-5 bg-accent rounded-full inline-block shadow-sm';
             title.append(badge, ' ' + category);
+
+            // 分类标题右侧的折叠/展开按钮（搜索模式下不显示，结果默认全展开）
+            if (!searchMode) {
+                const toggle = document.createElement('button');
+                toggle.className = 'cat-collapse-toggle w-6 h-6 flex items-center justify-center rounded-lg text-muted-foreground hover:text-accent dark:text-muted-foreground dark:hover:text-accent transition-colors';
+                toggle.setAttribute('type', 'button');
+                toggle.setAttribute('aria-label', (isCollapsed ? '展开' : '折叠') + '分类：' + category);
+                toggle.setAttribute('aria-expanded', String(!isCollapsed));
+                toggle.innerHTML = '<span class="cat-chevron block w-3.5 h-3.5 transition-transform duration-200"' + (isCollapsed ? ' style="transform:rotate(-90deg)"' : '') + '><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>';
+                toggle.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleCategoryCollapsed(category);
+                };
+                title.appendChild(toggle);
+            }
+
             titleContainer.appendChild(title);
 
             // 编辑模式下的标题栏操作
@@ -1637,6 +1759,14 @@ const HTML_CONTENT = `
                         </label>
                     </div>
 
+                    <!-- 默认折叠开关 -->
+                    <div class="flex items-center justify-center w-8 h-8 has-tooltip cursor-pointer" data-tooltip="\${isCollapsed ? '默认展开分类' : '默认折叠分类'}">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" aria-label="分类默认折叠" data-action="toggleCollapsed" data-category="\${escAttr(category)}" \${isCollapsed ? 'checked' : ''} class="sr-only peer">
+                            <div class="w-3.5 h-3.5 rounded-full border-2 border-line dark:border-line-input peer-focus:outline-none peer peer-checked:bg-accent peer-checked:border-accent transition-colors"></div>
+                        </label>
+                    </div>
+
                     <div class="w-px h-4 bg-line dark:bg-line-input mx-0.5"></div>
 
                     <!-- 删除 -->
@@ -1661,6 +1791,7 @@ const HTML_CONTENT = `
             
             cardContainer.className = \`grid \${gridClasses} card-container relative\`;
             cardContainer.id = gridId(category); // 与 section.id 区分，避免同页面 id 重复
+            if (isCollapsed) cardContainer.classList.add('hidden');
 
             // 卡片离屏构建后一次性挂载，减少 reflow
             const cardsFragment = document.createDocumentFragment();
@@ -1752,6 +1883,7 @@ const HTML_CONTENT = `
             if (isEditMode) btn.setAttribute('draggable', 'true');
             btn.onclick = () => {
                 if (categoryDragSuppressClick) { categoryDragSuppressClick = false; return; }
+                expandForNavigation(cat);
                 scrollToCategory(cat);
             };
             container.appendChild(btn);
@@ -2377,15 +2509,22 @@ const HTML_CONTENT = `
             }
         });
         container.addEventListener('change', (e) => {
-            const input = e.target.closest('[data-action="toggleHidden"], [data-action="togglePrivate"]');
+            const input = e.target.closest('[data-action="toggleHidden"], [data-action="togglePrivate"], [data-action="toggleCollapsed"]');
             if (!input) return;
             const tipBox = input.closest('.has-tooltip');
-            const isPrivate = input.dataset.action === 'togglePrivate';
+            const action = input.dataset.action;
+            const cat = input.dataset.category;
+            if (action === 'toggleCollapsed') {
+                if (tipBox) tipBox.setAttribute('data-tooltip', input.checked ? '默认展开分类' : '默认折叠分类');
+                setCategoryCollapsedSetting(cat, input.checked);
+                return;
+            }
+            const isPrivate = action === 'togglePrivate';
             if (tipBox) tipBox.setAttribute('data-tooltip', input.checked ? (isPrivate ? '设为公开分类' : '显示分类') : (isPrivate ? '设为私密分类' : '隐藏分类'));
             if (isPrivate) {
-                toggleCategoryPrivate(input.dataset.category, input.checked);
+                toggleCategoryPrivate(cat, input.checked);
             } else {
-                toggleCategoryHidden(input.dataset.category, input.checked);
+                toggleCategoryHidden(cat, input.checked);
             }
         });
     }
@@ -5022,6 +5161,7 @@ function validateCategories(raw) {
         if (!links) return { ok: false, reason: 'BAD_CATEGORY_SHAPE' };
         if (cat && cat.isPrivate != null && typeof cat.isPrivate !== 'boolean') return { ok: false, reason: 'BAD_FLAG' };
         if (cat && cat.isHidden != null && typeof cat.isHidden !== 'boolean') return { ok: false, reason: 'BAD_FLAG' };
+        if (cat && cat.collapsed != null && typeof cat.collapsed !== 'boolean') return { ok: false, reason: 'BAD_FLAG' };
 
         total += links.length;
         for (const l of links) {
@@ -5048,9 +5188,11 @@ function sanitizeCategories(raw) {
     const out = {};
     for (const name of Object.keys(raw)) {
         const cat = Array.isArray(raw[name]) ? { isHidden: false, isPrivate: false, links: raw[name] } : raw[name];
+        const collapsedField = typeof cat.collapsed === 'boolean' ? { collapsed: cat.collapsed } : {};
         out[name] = {
             isHidden: !!cat.isHidden,
             isPrivate: !!cat.isPrivate,
+            ...collapsedField,
             links: (cat.links || []).map(l => ({
                 name: String(l.name).slice(0, MAX_NAME),
                 url: String(l.url).slice(0, MAX_URL),
