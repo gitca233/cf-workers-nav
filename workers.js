@@ -2239,6 +2239,27 @@ const HTML_CONTENT = `
         } catch (e) { return null; }
     }
 
+    // 卡片操作菜单：卡片自带 backdrop-blur/transform 会形成独立层叠上下文，
+    // 导致上一行卡片的菜单被下一行卡片盖住而点不到——打开时抬高所属卡片的层级
+    function closeCardMenu(dropdown) {
+        dropdown.classList.add('hidden');
+        const card = dropdown.closest('.card');
+        if (card) card.style.zIndex = '';
+    }
+    function closeAllCardMenus() {
+        document.querySelectorAll('.card-menu-dropdown').forEach(el => {
+            el.classList.add('hidden');
+            const card = el.closest('.card');
+            if (card) card.style.zIndex = '';
+        });
+    }
+    function openCardMenu(dropdown) {
+        closeAllCardMenus();
+        dropdown.classList.remove('hidden');
+        const card = dropdown.closest('.card');
+        if (card) card.style.zIndex = '40';
+    }
+
     function createCard(link) {
         if (!isEditMode && link.isPrivate && !isLoggedIn) return null;
 
@@ -2402,37 +2423,30 @@ const HTML_CONTENT = `
 
             menuBtn.onclick = (e) => {
                 e.stopPropagation();
-                document.querySelectorAll('.card-menu-dropdown').forEach(el => {
-                    if (el !== dropdown) el.classList.add('hidden');
-                });
-                dropdown.classList.toggle('hidden');
+                if (dropdown.classList.contains('hidden')) openCardMenu(dropdown);
+                else closeCardMenu(dropdown);
             };
 
-            menuBtn.onmouseenter = () => {
-                document.querySelectorAll('.card-menu-dropdown').forEach(el => {
-                    if (el !== dropdown) el.classList.add('hidden');
-                });
-                dropdown.classList.remove('hidden');
-            };
+            menuBtn.onmouseenter = () => openCardMenu(dropdown);
             actionWrapper.onmouseleave = () => {
                 setTimeout(() => {
-                    if (!actionWrapper.matches(':hover')) dropdown.classList.add('hidden');
+                    if (!actionWrapper.matches(':hover')) closeCardMenu(dropdown);
                 }, 120);
             };
             dropdown.querySelector('.menu-edit').onclick = (e) => {
                 e.stopPropagation();
-                dropdown.classList.add('hidden');
+                closeCardMenu(dropdown);
                 showEditDialog(link);
             };
 
             dropdown.querySelector('.menu-delete').onclick = (e) => {
                 e.stopPropagation();
-                dropdown.classList.add('hidden');
+                closeCardMenu(dropdown);
                 removeCard(card);
             };
             dropdown.querySelector('.menu-private').onclick = (e) => {
                 e.stopPropagation();
-                dropdown.classList.add('hidden');
+                closeCardMenu(dropdown);
                 toggleCardPrivate(card);
             };
 
@@ -2486,7 +2500,7 @@ const HTML_CONTENT = `
         if (!window.hasAddedCardMenuListener) {
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('.card-menu-dropdown') && !e.target.closest('button')) {
-                    document.querySelectorAll('.card-menu-dropdown').forEach(el => el.classList.add('hidden'));
+                    closeAllCardMenus();
                 }
             });
             window.hasAddedCardMenuListener = true;
