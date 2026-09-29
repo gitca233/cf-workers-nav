@@ -609,11 +609,11 @@ const HTML_CONTENT = `
                                             </span>
                                             <span id="check-all-status" class="text-xs font-normal text-muted-foreground dark:text-muted-foreground"></span>
                                         </button>
+                                        <button id="refresh-icons-btn" onclick="refreshAllIcons()" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] hover:text-accent dark:hover:text-accent transition-colors flex items-center gap-3 font-medium">
+                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                            刷新所有网站图标
+                                        </button>
                                     </div>
-                                    <button id="refresh-icons-btn" onclick="refreshAllIcons()" class="w-full text-left px-3 py-2.5 rounded-lg text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] hover:text-accent dark:hover:text-accent transition-colors flex items-center gap-3 font-medium">
-                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                                        刷新所有网站图标
-                                    </button>
                                     
                                     <div class="px-3 py-2.5 flex items-center justify-between text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] rounded-lg group">
                                         <span class="flex items-center gap-3">
