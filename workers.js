@@ -3637,7 +3637,7 @@ const HTML_CONTENT = `
              } else {
                  var remMsg = (data && data.message) ? data.message : '密码错误';
                  var remaining = typeof data.remaining === 'number' ? data.remaining : 0;
-                 if (!(data && data.message) && remaining > 0) remMsg = '密码错误，还可尝试 ' + remaining + ' 次';
+                 if (remaining > 0) remMsg = remMsg + '，还可尝试 ' + remaining + ' 次';
                  await customAlert(remMsg);
              }
          } catch(e) { await customAlert('Login Error'); }
@@ -4843,6 +4843,7 @@ function validateCategories(raw) {
         const links = Array.isArray(cat) ? cat : (cat && Array.isArray(cat.links) ? cat.links : null);
         if (!links) return { ok: false, reason: 'BAD_CATEGORY_SHAPE' };
         if (cat && cat.isPrivate != null && typeof cat.isPrivate !== 'boolean') return { ok: false, reason: 'BAD_FLAG' };
+        if (cat && cat.isHidden != null && typeof cat.isHidden !== 'boolean') return { ok: false, reason: 'BAD_FLAG' };
 
         total += links.length;
         for (const l of links) {
@@ -4994,27 +4995,34 @@ export default {
                     return new Response(JSON.stringify({ valid: false, locked: true, remaining: 0, retryAfter: waitSec }), { status: 429, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
                 }
 
-                const { password, totp } = await request.json();
-                const passwordOk = typeof password === 'string' && (await timingSafeStringEqual(password, env.ADMIN_PASSWORD));
-                if (!passwordOk) {
+                // 密码与 TOTP 共用同一限流计数器，避免"已知密码"绕过二次验证去爆破验证码
+                const registerFailure = async () => {
                     const newAttempts = attempts + 1;
                     const newExpiredAt = Date.now() + LOCK_MS;
                     await env.CARD_ORDER.put(rateLimitKey, String(newAttempts), { expirationTtl: 900, metadata: { expiredAt: newExpiredAt } });
-                    const remaining = Math.max(0, MAX_ATTEMPTS - newAttempts);
-                    if (newAttempts >= MAX_ATTEMPTS) {
-                        return new Response(JSON.stringify({ valid: false, locked: true, remaining: 0, retryAfter: Math.max(1, Math.ceil((newExpiredAt - Date.now()) / 1000)) }), { status: 429, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+                    return { newAttempts, remaining: Math.max(0, MAX_ATTEMPTS - newAttempts), retryAfter: Math.max(1, Math.ceil((newExpiredAt - Date.now()) / 1000)) };
+                };
+                const failResponse = (info, extra = {}) => {
+                    if (info.newAttempts >= MAX_ATTEMPTS) {
+                        return new Response(JSON.stringify({ valid: false, locked: true, remaining: 0, retryAfter: info.retryAfter, ...extra }), { status: 429, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
                     }
-                    return new Response(JSON.stringify({ valid: false, remaining }), { status: 403, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+                    return new Response(JSON.stringify({ valid: false, remaining: info.remaining, ...extra }), { status: 403, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+                };
+
+                const { password, totp } = await request.json();
+                const passwordOk = typeof password === 'string' && (await timingSafeStringEqual(password, env.ADMIN_PASSWORD));
+                if (!passwordOk) {
+                    return failResponse(await registerFailure());
                 }
-                await env.CARD_ORDER.delete(rateLimitKey);
 
                 if (env.TOTP_SECRET) {
                     const totpOk = await verifyTotp(env.TOTP_SECRET, totp);
                     if (!totpOk) {
-                        const remaining = Math.max(0, MAX_ATTEMPTS - attempts);
-                        return new Response(JSON.stringify({ valid: false, error: 'INVALID_TOTP', message: '两步验证码错误', remaining }), { status: 403, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+                        return failResponse(await registerFailure(), { error: 'INVALID_TOTP', message: '两步验证码错误' });
                     }
                 }
+
+                await env.CARD_ORDER.delete(rateLimitKey);
 
                 const currentTime = Math.floor(Date.now() / 1000);
                 const kid = await currentKeyGen(env);
