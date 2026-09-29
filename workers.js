@@ -3913,7 +3913,6 @@ const HTML_CONTENT = `
     function parseBookmarks(html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const categories = {};
 
         // 清洗书签标题:按分隔符(|、英文/中文冒号 : ：、两边带可选空格的 -/–/—)拆分
         function cleanTitle(title) {
@@ -3951,20 +3950,27 @@ const HTML_CONTENT = `
             };
         }
 
-        function getLinks(dl) {
+        function getLinks(dl, catLabel, skipped) {
             const links = [];
             const dts = Array.from(dl.children).filter(e => e && e.tagName === 'DT');
             for (const dt of dts) {
                 const a = dt.querySelector(':scope > a');
                 if (!a) continue;
                 const url = (a.getAttribute('href') || '').trim();
-                if (!url) continue;
-                if (/^(javascript:|vbscript:|data:|chrome:|edge:|about:|magnet:)/i.test(url)) continue;
                 const clean = cleanTitle(a.textContent);
+                const why = importUrlRejectReason(url);
+                if (why) {
+                    if (skipped) skipped.push({ name: clean.name || url, url, category: catLabel, reason: why });
+                    continue;
+                }
                 links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: null, isPrivate: true });
             }
             return links;
         }
+
+        // 解析结果写入局部对象，避免污染页面正在使用的全局 categories
+        const parsedCats = {};
+        const parsedSkipped = [];
 
         // 递归处理一个文件夹:子文件夹生成独立分类,当前文件夹的直接链接归入当前分类
         function processFolder(dl, catName) {
@@ -3975,10 +3981,10 @@ const HTML_CONTENT = `
                 const subName = h3 ? h3.textContent.trim() : '未分类';
                 processFolder(childDl, subName);
             }
-            const links = getLinks(dl);
+            const links = getLinks(dl, catName, parsedSkipped);
             if (catName && links.length) {
-                if (!categories[catName]) categories[catName] = { isHidden: false, isPrivate: false, links: [] };
-                links.forEach(l => { l.category = catName; categories[catName].links.push(l); });
+                if (!parsedCats[catName]) parsedCats[catName] = { isHidden: false, isPrivate: false, links: [] };
+                links.forEach(l => { l.category = catName; parsedCats[catName].links.push(l); });
             }
         }
 
@@ -3995,41 +4001,118 @@ const HTML_CONTENT = `
                 const a = dt.querySelector(':scope > a');
                 if (!a) continue;
                 const url = (a.getAttribute('href') || '').trim();
-                if (!url || /^(javascript:|vbscript:|data:|chrome:|edge:|about:|magnet:)/i.test(url)) continue;
                 const clean = cleanTitle(a.textContent);
-                if (!categories['未分类']) categories['未分类'] = { isHidden: false, isPrivate: false, links: [] };
-                categories['未分类'].links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: '未分类', isPrivate: true });
+                const why = importUrlRejectReason(url);
+                if (why) {
+                    parsedSkipped.push({ name: clean.name || url, url, category: '未分类', reason: why });
+                    continue;
+                }
+                if (!parsedCats['未分类']) parsedCats['未分类'] = { isHidden: false, isPrivate: false, links: [] };
+                parsedCats['未分类'].links.push({ name: clean.name, url, tips: clean.tips, icon: '', category: '未分类', isPrivate: true });
             }
         }
 
-        return Object.keys(categories).length ? { categories } : null;
+        if (!Object.keys(parsedCats).length && !parsedSkipped.length) return null;
+        return { categories: parsedCats, skipped: parsedSkipped };
     }
 
     // 合并导入：以现有数据为基础，导入新分类/链接（同名分类合并、按 URL 去重）
+    // 书签协议白名单：与服务端 URL_SCHEME_OK 保持一致
+    // 用 [/] 字符类而非 \/ —— HTML_CONTENT 是模板字面量，\/ 会被转义吃掉导致分隔符错位
+    const IMPORT_URL_OK = /^https?:[/][/]/i;
+    // 常见被跳过的协议 → 面向用户的原因说明
+    const IMPORT_URL_SKIP_REASON = [
+        [/^javascript:/i,  '脚本协议，出于安全考虑禁止导入'],
+        [/^vbscript:/i,   '脚本协议，出于安全考虑禁止导入'],
+        [/^data:/i,        'data 协议，出于安全考虑禁止导入'],
+        [/^chrome:/i,      '浏览器内部页面（chrome://），在网站中无法打开'],
+        [/^edge:/i,        '浏览器内部页面（edge://），在网站中无法打开'],
+        [/^about:/i,       '浏览器内部页面（about://），在网站中无法打开'],
+        [/^magnet:/i,      'BT 种子链接，不支持'],
+        [/^file:/i,        '本地文件路径，不支持'],
+        [/^ftp:/i,         'FTP 链接已停用'],
+    ];
+
+    // 判定一个 URL 是否可导入；不可导入时返回原因文案
+    function importUrlRejectReason(url) {
+        if (!url) return '空地址';
+        if (IMPORT_URL_OK.test(url)) {
+            try { new URL(url); } catch { return '地址格式不合法'; }
+            return null;
+        }
+        for (const [re, why] of IMPORT_URL_SKIP_REASON) if (re.test(url)) return why;
+        return '仅支持 http:// 或 https:// 开头的网址';
+    }
+
+    // 导入去重用的 URL 归一化键：忽略末尾斜杠、hash、协议与域名大小写
+    // 让 https://a.com 与 https://a.com/ 被视为同一条
+    function importUrlKey(u) {
+        const raw = String(u == null ? '' : u).trim();
+        if (!raw) return '';
+        try {
+            const url = new URL(raw);
+            const path = url.pathname.replace(/[/]+$/, '');   // 同上：用 [/] 规避模板转义
+            return (url.host.toLowerCase() + path + url.search).toLowerCase();
+        } catch {
+            return raw.toLowerCase();
+        }
+    }
+
+    // 兼容 {名称:{links:[...]}} 与旧格式 {名称:[...]} 两种分类结构
+    function catLinksOf(cat) {
+        if (Array.isArray(cat)) return cat;
+        return (cat && Array.isArray(cat.links)) ? cat.links : [];
+    }
+
+    // 返回 { categories, stats }；同名分类按 URL 归一化去重后追加
     function mergeImportData(currentCats, importedData) {
         const merged = {};
-        Object.keys(currentCats).forEach(key => {
-            const cat = currentCats[key];
+        const stats = { added: 0, dup: 0, newCats: 0, invalid: 0, touchedCats: 0 };
+
+        Object.keys(currentCats || {}).forEach(key => {
+            const cat = currentCats[key] || {};
             merged[key] = {
                 isHidden: !!cat.isHidden,
                 isPrivate: !!cat.isPrivate,
-                links: Array.isArray(cat.links) ? cat.links.slice() : []
+                links: catLinksOf(cat).slice()
             };
         });
 
+        // 分类名去空白索引：避免 "test" 与 "test " 被当成两个分类
+        const nameIndex = new Map();
+        Object.keys(merged).forEach(k => nameIndex.set(k.trim().toLowerCase(), k));
+
         const importedCats = (importedData && importedData.categories) || {};
-        Object.keys(importedCats).forEach(catName => {
-            const importedLinks = (importedCats[catName] && importedCats[catName].links) || [];
-            if (!merged[catName]) merged[catName] = { isHidden: false, isPrivate: false, links: [] };
-            const existingUrls = new Set(merged[catName].links.map(l => l.url));
+        Object.keys(importedCats).forEach(rawName => {
+            const importedLinks = catLinksOf(importedCats[rawName]);
+
+            // 归一化分类名，命中已有分类则并入，否则新建
+            let catName = rawName;
+            const hit = nameIndex.get(rawName.trim().toLowerCase());
+            if (hit !== undefined) {
+                catName = hit;
+            } else {
+                nameIndex.set(catName.trim().toLowerCase(), catName);
+                merged[catName] = { isHidden: false, isPrivate: false, links: [] };
+                stats.newCats++;
+            }
+
+            const existingKeys = new Set(merged[catName].links.map(l => importUrlKey(l.url)));
+            let catTouched = false;
             importedLinks.forEach(link => {
-                if (link && link.url && !existingUrls.has(link.url)) {
-                    merged[catName].links.push({ ...link, category: catName, isPrivate: true });
-                    existingUrls.add(link.url);
-                }
+                if (!link || typeof link !== 'object' || !link.url) { stats.invalid++; return; }
+                const key = importUrlKey(link.url);
+                if (!key) { stats.invalid++; return; }
+                if (existingKeys.has(key)) { stats.dup++; return; }
+                merged[catName].links.push({ ...link, category: catName, isPrivate: true });
+                existingKeys.add(key);
+                stats.added++;
+                catTouched = true;
             });
+            if (catTouched) stats.touchedCats++;
         });
-        return merged;
+
+        return { categories: merged, stats };
     }
 
     async function importData() {
@@ -4048,11 +4131,12 @@ const HTML_CONTENT = `
                     try {
                         const content = event.target.result;
                         const trimmed = content.trimStart();
-                        let data;
+                        let data, skipped = [];
                         if (trimmed.startsWith('<!DOCTYPE') || /<(DL|H3)\b/i.test(trimmed)) {
                             // Chrome / Edge 书签 HTML
                             data = parseBookmarks(content);
                             if (!data) throw new Error("No valid bookmarks found");
+                            skipped = data.skipped || [];
                         } else {
                             // 本项目导出的 JSON 配置
                             data = JSON.parse(content);
@@ -4061,21 +4145,58 @@ const HTML_CONTENT = `
                         // 导入的所有链接默认设为私密(仅登录可见)
                         if (data && data.categories) {
                             for (const catObj of Object.values(data.categories)) {
-                                if (catObj && Array.isArray(catObj.links)) {
-                                    for (const link of catObj.links) {
-                                        if (link) link.isPrivate = true;
-                                    }
+                                for (const link of catLinksOf(catObj)) {
+                                    if (link) link.isPrivate = true;
                                 }
                             }
                         }
+                        // 预检：按协议白名单过滤，剔除导入数据里打不开的链接
+                        const rejected = [];
+                        if (data && data.categories) {
+                            const keptCats = {};
+                            for (const [cname, catObj] of Object.entries(data.categories)) {
+                                const kept = [];
+                                for (const link of catLinksOf(catObj)) {
+                                    const why = link ? importUrlRejectReason(link.url) : '数据格式错误';
+                                    if (why) rejected.push({ name: (link && link.name) || '(无名称)', url: (link && link.url) || '', category: cname, reason: why });
+                                    else kept.push(link);
+                                }
+                                if (kept.length || !rejected.some(r => r.category === cname)) {
+                                    keptCats[cname] = (catObj && !Array.isArray(catObj))
+                                        ? { ...catObj, links: kept }
+                                        : kept;
+                                }
+                            }
+                            data = { ...data, categories: keptCats };
+                        }
+                        const allSkipped = skipped.concat(rejected);
+
+                        // 导入前先告知会被跳过的条目，避免"看起来成功了其实没导进去"
+                        if (allSkipped.length) {
+                            const preview = allSkipped.slice(0, 8).map(s =>
+                                '· ' + s.name + '\\n   ' + String(s.url || '(空)').slice(0, 90) + '\\n   原因：' + s.reason).join('\\n');
+                            const more = allSkipped.length > 8 ? '\\n……另有 ' + (allSkipped.length - 8) + ' 条同类' : '';
+                            const go = await customConfirm(
+                                '检测到 ' + allSkipped.length + ' 条书签无法导入：\\n\\n' + preview + more + '\\n\\n这些书签会被跳过，其余内容继续导入。是否继续？',
+                                '继续导入', '取消导入'
+                            );
+                            if (!go) { await customAlert('已取消导入'); return; }
+                        }
+
                         // 选择导入方式：合并 or 覆盖
                         const mergeMode = await customConfirm(
                             '请选择导入方式：\\n\\n【合并】保留现有分类与链接，导入内容追加进去（同名分类按 URL 去重合并）\\n\\n【覆盖】清空现有全部数据，仅保留本次导入内容',
                             '合并导入', '覆盖导入'
                         );
-                        let payload = data;
+                        let payload = data, stats = null;
                         if (mergeMode) {
-                            payload = { categories: mergeImportData(categories, data) };
+                            const r = mergeImportData(categories, data);
+                            payload = { categories: r.categories };
+                            stats = r.stats;
+                        } else {
+                            let n = 0;
+                            for (const c of Object.values(data.categories || {})) n += catLinksOf(c).length;
+                            stats = { added: n, dup: 0, newCats: Object.keys(data.categories || {}).length, invalid: 0, touchedCats: Object.keys(data.categories || {}).length };
                         }
                         const res = await fetchWithAuth("/api/importData", {
                             method: "POST",
@@ -4089,12 +4210,26 @@ const HTML_CONTENT = `
                             await customAlert('登录凭证已过期，请重新登录');
                             return;
                         }
-                        if (!res.ok) throw new Error("Import failed");
-                        await customAlert('数据导入成功！');
-                        location.reload(); 
+                        if (!res.ok) {
+                            // 透出服务端真实原因，不再一律报"文件格式错误"
+                            let detail = '';
+                            try { const j = await res.json(); detail = (j && (j.detail || j.error)) || ''; } catch (_) {}
+                            throw new Error('HTTP ' + res.status + (detail ? ' ' + detail : ''));
+                        }
+                        const parts = [mergeMode ? '合并导入' : '覆盖导入', '成功', '新增 ' + stats.added + ' 条'];
+                        if (stats.dup) parts.push('跳过重复 ' + stats.dup + ' 条');
+                        if (stats.newCats) parts.push('新建分类 ' + stats.newCats + ' 个');
+                        if (allSkipped.length) parts.push('无法导入 ' + allSkipped.length + ' 条');
+                        await customAlert(parts.join('，') + '！');
+                        location.reload();
                     } catch (error) {
-                        console.error("解析文件失败:", error);
-                        await customAlert('文件格式错误，请检查文件内容！');
+                        console.error("导入失败:", error);
+                        const msg = String((error && error.message) || '');
+                        if (/^HTTP \d/.test(msg)) {
+                            await customAlert('导入被服务端拒绝：' + msg + '\\n\\n常见原因：链接数超限、分类数超限、名称或地址超长、存在非法链接。');
+                        } else {
+                            await customAlert('文件解析失败：' + msg + '\\n\\n请确认是本应用导出的 JSON 或浏览器书签 HTML。');
+                        }
                     }
                 };
                 reader.readAsText(file);
