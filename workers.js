@@ -1072,8 +1072,9 @@ const HTML_CONTENT = `
         loadSections();
     }
 
+    // 紧凑模式在浏览态与编辑态均生效
     function isCompactActive() {
-        return isCompact && !isEditMode;
+        return isCompact;
     }
 
     function toggleCompactMode() {
