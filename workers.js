@@ -503,14 +503,15 @@ const HTML_CONTENT = `
                         // （img{display:none} 并不阻止下载与解码，单独用它测不出图片开销）
                         if (_extra.indexOf('nocards') >= 0) {
                             // 页面渲染是异步的，反复清空几秒，确保内容与图片真正释放
+                            // 只做 3 轮：轮数太多会自己制造大量垃圾对象，把内存读数抬高
                             var _n = 0;
                             var _t = setInterval(function () {
                                 var _sc = document.getElementById('sections-container');
                                 if (_sc && _sc.firstChild) _sc.innerHTML = '';
                                 var _im = document.querySelectorAll('img');
                                 for (var _x = 0; _x < _im.length; _x++) _im[_x].remove();
-                                if (++_n > 25) clearInterval(_t);
-                            }, 200);
+                                if (++_n >= 3) clearInterval(_t);
+                            }, 1200);
                         }
                     });
                 }
@@ -5506,6 +5507,15 @@ export default {
             }
 
         if (url.pathname === '/' || url.pathname === '/index.html') {
+            // 临时性能对照页：?bare=1 返回最小 HTML（无 CSS/JS/内容），
+            // 用于区分「页面自身开销」与「Chrome 对该标签页的固定开销」。定位完删除。
+            if (url.searchParams.get('bare')) {
+                return new Response(
+                    '<!doctype html><html><head><meta charset="utf-8"><title>bare</title></head>' +
+                    '<body style="font:16px sans-serif;padding:20px">bare 对照页：无 CSS、无 JS、无内容</body></html>',
+                    { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
+                );
+            }
             const theme = await getPublishedTheme(env);
             const { etag, body } = await buildHtml(theme);
 
