@@ -451,71 +451,6 @@ const HTML_CONTENT = `
                 }
             } catch (e) { /* 忽略 */ }
 
-            // ===== 临时性能诊断开关（定位渲染内存用，定位完可整段删除）=====
-            // 用法：?perf=plain 一次性关掉全部可疑渲染开销；也可指定单项，多个用逗号分隔：
-            // noimg(图片) noshadow(阴影) notrans(过渡/动画) noblob(背景光斑)
-            // nograd(渐变) nofont(网络字体) nobg(半透明底色) noblur(毛玻璃)
-            try {
-                var _pf = (new URLSearchParams(location.search).get('perf') || '').toLowerCase();
-                if (_pf) {
-                    var _flags = _pf.split(/[,+\\s]+/).filter(Boolean);
-                    var _css = {
-                        noimg: 'img{display:none !important}',
-                        noshadow: '*{box-shadow:none !important}',
-                        notrans: '*{transition:none !important;animation:none !important}',
-                        noblob: '.glass-blob{display:none !important}',
-                        nograd: '*{background-image:none !important}',
-                        nofont: '*,*:before,*:after{font-family:sans-serif !important}',
-                        nobg: '*{background-color:#fff !important}html.dark *{background-color:#0f172a !important}',
-                        nobglayer: '#bg-layer{display:none !important}'
-                    };
-                    var _on = [];
-                    var _extra = [];
-                    for (var _i = 0; _i < _flags.length; _i++) {
-                        var _f = _flags[_i];
-                        if (_f === 'plain') { _on.push('plain'); continue; }
-                        if (_f === 'noblur') {
-                            document.documentElement.classList.add('no-glass');
-                            _on.push(_f);
-                            continue;
-                        }
-                        if (_f === 'nocards') { _extra.push('nocards'); continue; }
-                        if (_css[_f]) _on.push(_f);
-                    }
-                    var _text = '';
-                    if (_on.indexOf('plain') >= 0) {
-                        _on = ['plain'];
-                        for (var _k in _css) _text += _css[_k];
-                    } else {
-                        for (var _j = 0; _j < _on.length; _j++) { if (_css[_on[_j]]) _text += _css[_on[_j]]; }
-                    }
-                    var _st = document.createElement('style');
-                    _st.id = '__perfprobe';
-                    _st.textContent = _text;
-                    document.head.appendChild(_st);
-                    window.__PERF_FLAGS = _on;
-                    document.addEventListener('DOMContentLoaded', function () {
-                        var _b = document.createElement('div');
-                        _b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#000;color:#4f4;font:12px/1.5 monospace;padding:5px 9px;border-radius:6px;pointer-events:none';
-                        _b.textContent = 'perf 已生效: ' + _on.concat(_extra).join(',');
-                        document.body.appendChild(_b);
-                        // nocards：渲染完成后真正清空内容并移除图片，释放解码内存
-                        // （img{display:none} 并不阻止下载与解码，单独用它测不出图片开销）
-                        if (_extra.indexOf('nocards') >= 0) {
-                            // 页面渲染是异步的，反复清空几秒，确保内容与图片真正释放
-                            // 只做 3 轮：轮数太多会自己制造大量垃圾对象，把内存读数抬高
-                            var _n = 0;
-                            var _t = setInterval(function () {
-                                var _sc = document.getElementById('sections-container');
-                                if (_sc && _sc.firstChild) _sc.innerHTML = '';
-                                var _im = document.querySelectorAll('img');
-                                for (var _x = 0; _x < _im.length; _x++) _im[_x].remove();
-                                if (++_n >= 3) clearInterval(_t);
-                            }, 1200);
-                        }
-                    });
-                }
-            } catch (e) { /* 忽略 */ }
 
             window.__PUBLISHED_THEME = "__NAV_PUBLISHED_THEME__";
             try {
@@ -5507,15 +5442,6 @@ export default {
             }
 
         if (url.pathname === '/' || url.pathname === '/index.html') {
-            // 临时性能对照页：?bare=1 返回最小 HTML（无 CSS/JS/内容），
-            // 用于区分「页面自身开销」与「Chrome 对该标签页的固定开销」。定位完删除。
-            if (url.searchParams.get('bare')) {
-                return new Response(
-                    '<!doctype html><html><head><meta charset="utf-8"><title>bare</title></head>' +
-                    '<body style="font:16px sans-serif;padding:20px">bare 对照页：无 CSS、无 JS、无内容</body></html>',
-                    { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }
-                );
-            }
             const theme = await getPublishedTheme(env);
             const { etag, body } = await buildHtml(theme);
 
