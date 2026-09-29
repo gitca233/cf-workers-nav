@@ -451,6 +451,54 @@ const HTML_CONTENT = `
                 }
             } catch (e) { /* 忽略 */ }
 
+            // ===== 临时性能诊断开关（定位渲染内存用，定位完可整段删除）=====
+            // 用法：?perf=plain 一次性关掉全部可疑渲染开销；也可指定单项，多个用逗号分隔：
+            // noimg(图片) noshadow(阴影) notrans(过渡/动画) noblob(背景光斑)
+            // nograd(渐变) nofont(网络字体) nobg(半透明底色) noblur(毛玻璃)
+            try {
+                var _pf = (new URLSearchParams(location.search).get('perf') || '').toLowerCase();
+                if (_pf) {
+                    var _flags = _pf.split(/[,+\s]+/).filter(Boolean);
+                    var _css = {
+                        noimg: 'img{display:none !important}',
+                        noshadow: '*{box-shadow:none !important}',
+                        notrans: '*{transition:none !important;animation:none !important}',
+                        noblob: '.glass-blob{display:none !important}',
+                        nograd: '*{background-image:none !important}',
+                        nofont: '*,*:before,*:after{font-family:sans-serif !important}',
+                        nobg: '*{background-color:#fff !important}html.dark *{background-color:#0f172a !important}'
+                    };
+                    var _on = [];
+                    for (var _i = 0; _i < _flags.length; _i++) {
+                        var _f = _flags[_i];
+                        if (_f === 'plain') { _on.push('plain'); continue; }
+                        if (_f === 'noblur') {
+                            document.documentElement.classList.add('no-glass');
+                            _on.push(_f);
+                            continue;
+                        }
+                        if (_css[_f]) _on.push(_f);
+                    }
+                    if (_on.indexOf('plain') >= 0) {
+                        _on = ['plain'];
+                        for (var _k in _css) _css[_k] = '';
+                    }
+                    var _text = '';
+                    for (var _j = 0; _j < _on.length; _j++) { if (_css[_on[_j]]) _text += _css[_on[_j]]; }
+                    var _st = document.createElement('style');
+                    _st.id = '__perfprobe';
+                    _st.textContent = _text;
+                    document.head.appendChild(_st);
+                    window.__PERF_FLAGS = _on;
+                    document.addEventListener('DOMContentLoaded', function () {
+                        var _b = document.createElement('div');
+                        _b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#000;color:#4f4;font:12px/1.5 monospace;padding:5px 9px;border-radius:6px;pointer-events:none';
+                        _b.textContent = 'perf 已生效: ' + _on.join(',');
+                        document.body.appendChild(_b);
+                    });
+                }
+            } catch (e) { /* 忽略 */ }
+
             window.__PUBLISHED_THEME = "__NAV_PUBLISHED_THEME__";
             try {
                 var _pt = window.__PUBLISHED_THEME;
