@@ -240,6 +240,40 @@ const HTML_CONTENT = `
         html.dark .card-status-tag.offline {
             color: #f87171;
         }
+        /* ===== 省内存模式：关闭毛玻璃 =====
+           背景模糊（backdrop-filter）会让每个元素单独快照一次背景，
+           45 张卡片叠加时光栅内存会暴涨到数百 MB。
+           省内存模式下统一关闭 backdrop-filter，并用径向渐变替代大范围模糊，
+           视觉上保留原有的柔和光晕观感。 */
+        .glass-blob {
+            --glass-blob-color: color-mix(in oklab, color-mix(in oklab, var(--primary) 45%, var(--background)) 30%, transparent);
+        }
+        .dark .glass-blob {
+            --glass-blob-color: color-mix(in oklab, color-mix(in oklab, var(--primary) 25%, var(--background)) 30%, transparent);
+        }
+        .glass-blob-2 {
+            --glass-blob-color: rgba(147, 197, 253, 0.3);
+        }
+        .dark .glass-blob-2 {
+            --glass-blob-color: rgba(147, 51, 234, 0.2);
+        }
+        html.no-glass * {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        html.no-glass .glass-blob {
+            filter: none !important;
+            background-image: radial-gradient(circle closest-side, var(--glass-blob-color) 0%, var(--glass-blob-color) 22%, transparent 100%);
+        }
+        html.no-glass .glass-card {
+            background-color: color-mix(in oklab, var(--card) 92%, var(--background)) !important;
+        }
+        html.no-glass .glass-header {
+            background-color: var(--background) !important;
+        }
+        html.no-glass .glass-panel {
+            background-color: var(--card) !important;
+        }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -408,6 +442,15 @@ const HTML_CONTENT = `
             window.isDarkTheme = isDark;
             if (isDark) document.documentElement.classList.add('dark');
 
+            // 省内存模式：默认开启（未显式关闭时），在首帧渲染前应用，避免毛玻璃闪现
+            window.__isLowMemory = function () { return document.documentElement.classList.contains('no-glass'); };
+            window.__applyLowMemory = function (on) { document.documentElement.classList.toggle('no-glass', on !== false); };
+            try {
+                if (localStorage.getItem('lowMemoryMode') !== '0') {
+                    document.documentElement.classList.add('no-glass');
+                }
+            } catch (e) { /* 忽略 */ }
+
             window.__PUBLISHED_THEME = "__NAV_PUBLISHED_THEME__";
             try {
                 var _pt = window.__PUBLISHED_THEME;
@@ -458,13 +501,13 @@ const HTML_CONTENT = `
     <!-- 背景层 -->
     <div class="fixed inset-0 -z-10 h-full w-full overflow-hidden bg-base dark:bg-base">
         <!-- <div class="absolute inset-0 bg-gradient-to-br from-[var(--background)] to-[var(--secondary)] dark:from-[var(--background)] dark:to-[var(--card)]"></div> -->
-        <div class="absolute top-[-5%] left-[-10%] w-[800px] h-[800px] bg-[color-mix(in_oklab,color-mix(in_oklab,var(--primary)_45%,var(--background))_30%,transparent)] dark:bg-[color-mix(in_oklab,color-mix(in_oklab,var(--primary)_25%,var(--background))_30%,transparent)] rounded-full blur-[120px]"></div>
-        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-300/30 dark:bg-purple-600/20 rounded-full blur-[120px]"></div>
+        <div class="glass-blob absolute top-[-5%] left-[-10%] w-[800px] h-[800px] bg-[color-mix(in_oklab,color-mix(in_oklab,var(--primary)_45%,var(--background))_30%,transparent)] dark:bg-[color-mix(in_oklab,color-mix(in_oklab,var(--primary)_25%,var(--background))_30%,transparent)] rounded-full blur-[120px]"></div>
+        <div class="glass-blob glass-blob-2 absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-300/30 dark:bg-purple-600/20 rounded-full blur-[120px]"></div>
     </div>
 
     <!-- 顶部固定导航 -->
     <div class="fixed top-0 left-0 right-0 z-50 transition-all duration-300">
-        <div class="backdrop-blur-md bg-[color-mix(in_oklab,var(--background)_80%,transparent)] dark:bg-[color-mix(in_oklab,var(--background)_85%,transparent)] border-b border-[color-mix(in_oklab,var(--border)_40%,transparent)] dark:border-[color-mix(in_oklab,var(--border)_40%,transparent)] shadow-sm [transform:translateZ(0)]">
+        <div class="glass-header backdrop-blur-md bg-[color-mix(in_oklab,var(--background)_80%,transparent)] dark:bg-[color-mix(in_oklab,var(--background)_85%,transparent)] border-b border-[color-mix(in_oklab,var(--border)_40%,transparent)] dark:border-[color-mix(in_oklab,var(--border)_40%,transparent)] shadow-sm [transform:translateZ(0)]">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between h-16 gap-4">
                     
@@ -636,6 +679,16 @@ const HTML_CONTENT = `
                                         </span>
                                         <label class="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" id="save-preference-checkbox" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-[color-mix(in_oklab,var(--foreground)_35%,var(--card))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] peer-checked:bg-accent"></div>
+                                        </label>
+                                    </div>
+                                    <div class="px-3 py-2.5 flex items-center justify-between text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] rounded-lg group">
+                                        <span class="flex items-center gap-3">
+                                            <svg class="w-4 h-4 text-muted-foreground group-hover:text-muted-foreground dark:text-muted-foreground dark:group-hover:text-base-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                            省内存模式
+                                        </span>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="low-memory-checkbox" class="sr-only peer">
                                             <div class="w-9 h-5 bg-[color-mix(in_oklab,var(--foreground)_35%,var(--card))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] peer-checked:bg-accent"></div>
                                         </label>
                                     </div>
@@ -1343,6 +1396,7 @@ const HTML_CONTENT = `
             layoutSwitchCheckbox: document.getElementById('layout-switch-checkbox'),
             compactSwitchCheckbox: document.getElementById('compact-switch-checkbox'),
             savePrefCheckbox: document.getElementById('save-preference-checkbox'),
+            lowMemCheckbox: document.getElementById('low-memory-checkbox'),
             searchButton: document.getElementById('search-button'),
             searchInput: document.getElementById('search-input'),
             clearSearchButton: document.getElementById('clear-search-button'),
@@ -1384,6 +1438,15 @@ const HTML_CONTENT = `
         
         const savedPref = localStorage.getItem('savePreferences') === 'true';
         elements.savePrefCheckbox.checked = savedPref;
+
+        // 省内存模式：默认开启，与首屏脚本保持一致
+        if (elements.lowMemCheckbox) {
+            const lowMem = (function () {
+                try { return localStorage.getItem('lowMemoryMode') !== '0'; } catch (e) { return true; }
+            })();
+            elements.lowMemCheckbox.checked = lowMem;
+            if (window.__applyLowMemory) window.__applyLowMemory(lowMem);
+        }
 
         if (window.matchMedia) {
             const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
@@ -1451,6 +1514,14 @@ const HTML_CONTENT = `
                 localStorage.setItem('theme', window.isDarkTheme ? 'dark' : 'light');
             }
         });
+
+        if (elements.lowMemCheckbox) {
+            elements.lowMemCheckbox.addEventListener('change', () => {
+                const on = elements.lowMemCheckbox.checked;
+                try { localStorage.setItem('lowMemoryMode', on ? '1' : '0'); } catch (e) { /* 忽略 */ }
+                if (window.__applyLowMemory) window.__applyLowMemory(on);
+            });
+        }
 
         elements.searchButton.addEventListener('click', async () => {
             const query = elements.searchInput.value.trim();
@@ -1762,7 +1833,7 @@ const HTML_CONTENT = `
             // 编辑模式下的标题栏操作
             if (isEditMode) {
                 const controls = document.createElement('div');
-                controls.className = 'flex items-center gap-1 ml-auto bg-[color-mix(in_oklab,var(--muted)_70%,transparent)] dark:bg-[color-mix(in_oklab,var(--muted)_25%,transparent)] p-1 rounded-xl border border-[color-mix(in_oklab,var(--border)_60%,transparent)] dark:border-[color-mix(in_oklab,var(--border)_60%,transparent)] backdrop-blur-sm';
+                controls.className = 'glass-panel flex items-center gap-1 ml-auto bg-[color-mix(in_oklab,var(--muted)_70%,transparent)] dark:bg-[color-mix(in_oklab,var(--muted)_25%,transparent)] p-1 rounded-xl border border-[color-mix(in_oklab,var(--border)_60%,transparent)] dark:border-[color-mix(in_oklab,var(--border)_60%,transparent)] backdrop-blur-sm';
                 const btnBase = "w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 hover:scale-105 active:scale-95";
                 
                 controls.innerHTML = \`
@@ -2316,7 +2387,7 @@ const HTML_CONTENT = `
         
         let cardBaseClass = isAppLayout 
             ? 'flex flex-col items-center justify-start py-1 gap-1.5 hover:z-10' 
-            : 'flex flex-col ' + (isCompactActive() ? 'px-2 py-1.5' : 'p-4') + ' bg-[color-mix(in_oklab,var(--card)_90%,transparent)] dark:bg-[color-mix(in_oklab,var(--card)_60%,transparent)] backdrop-blur-sm border border-line dark:border-[color-mix(in_oklab,var(--border)_50%,transparent)] hover:border-[color-mix(in_oklab,var(--primary)_50%,transparent)] dark:hover:border-[color-mix(in_oklab,var(--primary)_50%,transparent)] shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
+            : 'glass-card flex flex-col ' + (isCompactActive() ? 'px-2 py-1.5' : 'p-4') + ' bg-[color-mix(in_oklab,var(--card)_90%,transparent)] dark:bg-[color-mix(in_oklab,var(--card)_60%,transparent)] backdrop-blur-sm border border-line dark:border-[color-mix(in_oklab,var(--border)_50%,transparent)] hover:border-[color-mix(in_oklab,var(--primary)_50%,transparent)] dark:hover:border-[color-mix(in_oklab,var(--primary)_50%,transparent)] shadow-sm hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] dark:shadow-none dark:hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.4)] hover:-translate-y-1.5';
             
         if (link.isPrivate && !isAppLayout) {
             cardBaseClass += ' ring-1 ring-amber-400/40 bg-[color-mix(in_oklab,var(--card)_85%,transparent)] dark:bg-amber-900/10 !border-amber-200 dark:!border-amber-700/50';
