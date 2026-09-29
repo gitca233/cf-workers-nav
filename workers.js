@@ -573,16 +573,20 @@ const HTML_CONTENT = `
                                         </label>
                                     </div>
 
-                                    <!-- 分类默认折叠 -->
-                                    <div class="px-3 py-2.5 flex items-center justify-between text-sm text-base-foreground dark:text-base-foreground hover:bg-[var(--menu-hover)] rounded-lg group">
-                                        <span class="flex items-center gap-3">
-                                            <svg class="w-4 h-4 text-muted-foreground group-hover:text-muted-foreground dark:text-muted-foreground dark:group-hover:text-base-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
-                                            分类默认折叠
-                                        </span>
-                                        <label class="relative inline-flex items-center cursor-pointer">
-                                            <input type="checkbox" id="default-collapse-checkbox" onchange="toggleDefaultCollapsed()" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-[color-mix(in_oklab,var(--foreground)_35%,var(--card))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--card))] peer-checked:bg-accent"></div>
-                                        </label>
+                                    <!-- 分类默认折叠（三态，管理员配置，存服务端；仅登录显示） -->
+                                    <div id="collapse-mode-menu" class="hidden px-3 py-2.5">
+                                        <div class="flex items-center justify-between text-sm text-base-foreground dark:text-base-foreground mb-2">
+                                            <span class="flex items-center gap-3">
+                                                <svg class="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
+                                                分类默认折叠
+                                            </span>
+                                            <span class="text-xs text-muted-foreground">对所有访客生效</span>
+                                        </div>
+                                        <div id="collapse-mode-group" class="flex gap-1 p-1 rounded-lg bg-[color-mix(in_oklab,var(--muted)_70%,transparent)] dark:bg-[color-mix(in_oklab,var(--muted)_25%,transparent)] border border-line dark:border-line">
+                                            <button type="button" data-mode="follow" class="collapse-mode-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors">跟随分类</button>
+                                            <button type="button" data-mode="all" class="collapse-mode-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors">全部折叠</button>
+                                            <button type="button" data-mode="expanded" class="collapse-mode-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors">全部展开</button>
+                                        </div>
                                     </div>
                                     
                                     <!-- 【新增】APP 布局切换 -->
@@ -908,7 +912,8 @@ const HTML_CONTENT = `
     let isLoggedIn = false;
     let isAppLayout = localStorage.getItem('appLayout') === 'true';
     let isCompact = localStorage.getItem('compactMode') === 'true';
-    let defaultCollapsed = localStorage.getItem('defaultCollapsed') === 'true';
+    // 全局默认折叠模式（服务端配置，三态）：follow=跟随分类设置 / all=全部折叠 / expanded=全部展开
+    let collapseMode = 'follow';
     // 分类折叠的会话/访客覆盖：localStorage 持久化，来源为浏览态点击标题
     const collapsedOverrides = new Map();
     (function loadCollapsedOverrides() {
@@ -1114,12 +1119,15 @@ const HTML_CONTENT = `
     }
 
     // —— 分类折叠/展开 ——
-    // 生效判定优先级：本次会话覆盖 > 分类自己显式设置(collapsed) > 全局默认(defaultCollapsed)
+    // 生效判定优先级：访客覆盖(本机浏览器) > 全局模式(服务端) > 分类自身设置(服务端)
+    // 三者分属不同主体：访客点标题只存本机，永不写服务端；全局与分类设置仅管理员可改
     function isCategoryCollapsed(name) {
         if (collapsedOverrides.has(name)) return collapsedOverrides.get(name);
+        if (collapseMode === 'all') return true;
+        if (collapseMode === 'expanded') return false;
         const cat = categories[name];
         if (cat && typeof cat.collapsed === 'boolean') return cat.collapsed;
-        return defaultCollapsed;
+        return false;
     }
 
     function persistCollapsedOverride(name, value) {
@@ -1146,17 +1154,10 @@ const HTML_CONTENT = `
         }
     }
 
+    // 点标题折叠/展开 = 访客行为：无论是否登录/编辑态，都只写本机浏览器，绝不覆盖服务端配置
     function setCategoryCollapsed(name, collapsed) {
         collapsedOverrides.set(name, collapsed);
         persistCollapsedOverride(name, collapsed);
-        if (isEditMode && categories[name]) {
-            // 编辑态：点标题即视为「该分类默认折叠」，持久化到服务端
-            categories[name].collapsed = collapsed;
-            clearCollapsedOverride(name);
-            toggledState(name);
-            saveLinks();
-            return;
-        }
         toggledState(name);
     }
 
@@ -1165,7 +1166,7 @@ const HTML_CONTENT = `
         setCategoryCollapsed(name, !isCategoryCollapsed(name));
     }
 
-    // 编辑态分类控件里的「默认折叠」设置
+    // 分类自身默认折叠（仅编辑态分类控件可改，服务端持久化；全局为 follow 时才生效）
     function setCategoryCollapsedSetting(name, collapsed) {
         if (!categories[name]) return;
         categories[name].collapsed = collapsed;
@@ -1174,13 +1175,48 @@ const HTML_CONTENT = `
         saveLinks();
     }
 
-    // 全局默认：折叠 or 展开
-    function toggleDefaultCollapsed() {
-        defaultCollapsed = !defaultCollapsed;
-        try { localStorage.setItem('defaultCollapsed', String(defaultCollapsed)); } catch (e) {}
-        const checkbox = document.getElementById('default-collapse-checkbox');
-        if (checkbox) checkbox.checked = defaultCollapsed;
-        renderCategorySections({ renderButtons: true });
+    // 全局默认折叠模式（管理员配置，存服务端，对所有访客统一生效）
+    const COLLAPSE_MODES = ['follow', 'all', 'expanded'];
+    function renderCollapseModeUI() {
+        const group = document.getElementById('collapse-mode-group');
+        if (!group) return;
+        group.querySelectorAll('.collapse-mode-btn').forEach(btn => {
+            const active = btn.dataset.mode === collapseMode;
+            btn.setAttribute('aria-pressed', String(active));
+            btn.classList.toggle('bg-accent', active);
+            btn.classList.toggle('text-accent-foreground', active);
+            btn.classList.toggle('text-muted-foreground', !active);
+        });
+    }
+
+    async function setCollapseMode(mode) {
+        if (COLLAPSE_MODES.indexOf(mode) < 0) return;
+        if (!await validateTokenOrRedirect()) return;
+        try {
+            const response = await fetchWithAuth('/api/saveSettings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ defaultCollapsed: mode })
+            });
+            if (response.status === 401) { logout(); return; }
+            const result = await response.json();
+            if (!result.success) throw new Error('save failed');
+            collapseMode = mode;
+            // 管理员改的是默认值，顺带清掉本机的访客覆盖，保证改动立即可见
+            collapsedOverrides.clear();
+            try {
+                const stale = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.indexOf('navCollapsed:') === 0) stale.push(k);
+                }
+                stale.forEach(k => localStorage.removeItem(k));
+            } catch (e) {}
+            renderCollapseModeUI();
+            renderCategorySections({ renderButtons: true });
+        } catch (e) {
+            await customAlert('保存全局折叠设置失败，请重试');
+        }
     }
 
     // 点击分类导航按钮跳转时，强制展开目标分类（仅本次会话，不改持久默认）
@@ -1336,8 +1372,15 @@ const HTML_CONTENT = `
             elements.compactSwitchCheckbox.checked = isCompact;
         }
 
-        const defaultCollapseCheckbox = document.getElementById('default-collapse-checkbox');
-        if (defaultCollapseCheckbox) defaultCollapseCheckbox.checked = defaultCollapsed;
+        renderCollapseModeUI();
+        const collapseModeGroup = document.getElementById('collapse-mode-group');
+        if (collapseModeGroup) {
+            collapseModeGroup.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-mode]');
+                if (!btn) return;
+                setCollapseMode(btn.dataset.mode);
+            });
+        }
         
         const savedPref = localStorage.getItem('savePreferences') === 'true';
         elements.savePrefCheckbox.checked = savedPref;
@@ -1492,6 +1535,9 @@ const HTML_CONTENT = `
             if (!response.ok) throw new Error("HTTP error! status: " + response.status);
             
             const data = await response.json();
+            if (data.settings && COLLAPSE_MODES.indexOf(data.settings.defaultCollapsed) >= 0) {
+                collapseMode = data.settings.defaultCollapsed;
+            }
             if (data.categories) {
                 Object.keys(categories).forEach(key => delete categories[key]);
                 Object.assign(categories, data.categories);
@@ -2168,18 +2214,21 @@ const HTML_CONTENT = `
         const addCategoryContainer = document.getElementById('add-category-container');
         const dataToolsMenu = document.getElementById('data-tools-menu');
         const checkAllMenu = document.getElementById('check-all-menu');
+        const collapseModeMenu = document.getElementById('collapse-mode-menu');
         
         loginBtn.innerHTML = isLoggedIn ? 
             '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg> 退出登录' : 
             '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> 登录';
         
-        if(isLoggedIn) {
+        if (isLoggedIn) {
             loginBtn.classList.replace('text-red-500', 'text-base-foreground');
             if(dataToolsMenu) dataToolsMenu.classList.remove('hidden');
             if(checkAllMenu) checkAllMenu.classList.remove('hidden');
+            if(collapseModeMenu) { collapseModeMenu.classList.remove('hidden'); renderCollapseModeUI(); }
         } else {
             if(dataToolsMenu) dataToolsMenu.classList.add('hidden');
             if(checkAllMenu) checkAllMenu.classList.add('hidden');
+            if(collapseModeMenu) collapseModeMenu.classList.add('hidden');
         }
         
         if (isEditMode) {
@@ -4611,10 +4660,14 @@ async function bumpRev(env) {
     catch (e) { console.warn('rev bump failed', e); return rev; }
 }
 
+// 响应结构的版本维度：代码改动导致 getLinks 响应格式变化时 +1，
+// 使旧结构的边缘缓存立即失效（该缓存无 TTL，只靠 rev 失效，而 rev 仅在数据变更时递增）
+const GETLINKS_SCHEMA_VERSION = 2;
 function cacheKeyFor(url, rev, scope) {
     const k = new URL(url);
     k.searchParams.set('__v', rev);        // 版本失效维度
     k.searchParams.set('__s', scope);      // 鉴权维度
+    k.searchParams.set('__x', GETLINKS_SCHEMA_VERSION); // 响应结构维度
     return new Request(k.toString(), { method: 'GET' });
 }
 
@@ -4701,6 +4754,42 @@ async function handleSaveTheme(request, env) {
     } catch (e) { console.warn('theme cache purge failed', e); }
     _pubThemeMemo.expireAt = 0; // 失效 isolate 缓存，站长即时可见
     return new Response(JSON.stringify({ ok: true, updatedAt: rec.updatedAt }), { status: 200, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+}
+
+// —— 全局折叠默认（三态，服务端配置，对所有访客统一生效）——
+// follow=跟随各分类自身设置 / all=全部折叠 / expanded=全部展开
+const COLLAPSE_MODES_SRV = ['follow', 'all', 'expanded'];
+function sanitizeCollapseMode(v) {
+    return COLLAPSE_MODES_SRV.indexOf(v) >= 0 ? v : 'follow';
+}
+async function readSiteSettings(env) {
+    try {
+        const raw = await env.CARD_ORDER.get(DEFAULT_USER + ':settings');
+        if (!raw) return { defaultCollapsed: 'follow' };
+        const obj = JSON.parse(raw);
+        return { defaultCollapsed: sanitizeCollapseMode(obj && obj.defaultCollapsed) };
+    } catch (e) {
+        return { defaultCollapsed: 'follow' };
+    }
+}
+async function handleSaveSettings(request, env) {
+    const v = await validateServerToken(request.headers.get('Authorization'), env);
+    if (!v.isValid) return new Response(JSON.stringify(v.response), { status: v.status, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+    const body = await readJsonBody(request, 1024);
+    if (!body.ok) return new Response(JSON.stringify({ error: body.reason }), { status: body.reason === 'TOO_LARGE' ? 413 : 400, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+    const b = body.data || {};
+    if (b.defaultCollapsed === undefined || COLLAPSE_MODES_SRV.indexOf(b.defaultCollapsed) < 0) {
+        return new Response(JSON.stringify({ error: 'INVALID_MODE' }), { status: 422, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+    }
+    const rec = { defaultCollapsed: b.defaultCollapsed, updatedAt: Date.now() };
+    try {
+        await env.CARD_ORDER.put(DEFAULT_USER + ':settings', JSON.stringify(rec));
+    } catch (e) {
+        return new Response(JSON.stringify({ error: 'KV_WRITE_FAILED' }), { status: 500, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
+    }
+    // 匿名 getLinks 走边缘缓存（key 含 rev），换 rev 才能让访客立刻看到新默认值
+    const rev = await bumpRev(env);
+    return new Response(JSON.stringify({ success: true, rev, settings: { defaultCollapsed: rec.defaultCollapsed } }), { status: 200, headers: { ...corsHeaders(request, env), 'Content-Type': 'application/json' } });
 }
 
 // —— 发布主题注入 ——
@@ -5493,15 +5582,20 @@ export default {
                 }
             }
             let body, cacheable;
+            const siteSettings = await readSiteSettings(env);
 
             if (scope === 'authed') {
-                body = JSON.stringify(data);
+                body = JSON.stringify(Object.assign({}, data, { settings: siteSettings }));
                 cacheable = false;
             } else {
-                body = JSON.stringify({ categories: filterPublic(data.categories) });
+                body = JSON.stringify({ categories: filterPublic(data.categories), settings: siteSettings });
                 cacheable = true;
             }
             return sendCached(body, request, cacheKey, cacheable, { 'X-KV-Cache': 'MISS' });
+        }
+
+        if (url.pathname === '/api/saveSettings' && request.method === 'POST') {
+            return handleSaveSettings(request, env);
         }
 
         if (url.pathname === '/api/saveData' && request.method === 'POST') {
