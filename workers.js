@@ -2258,6 +2258,10 @@ const HTML_CONTENT = `
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                     编辑
                 </button>
+                <button class="menu-private w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-base-foreground dark:text-base-foreground hover:bg-soft dark:hover:bg-[color-mix(in_oklab,var(--muted)_60%,transparent)] hover:text-accent transition-colors flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+                    \${link.isPrivate ? '设为公开' : '设为私密'}
+                </button>
                 <button class="menu-delete w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-base-foreground dark:text-base-foreground hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 transition-colors flex items-center gap-2">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     删除
@@ -2272,6 +2276,17 @@ const HTML_CONTENT = `
                 dropdown.classList.toggle('hidden');
             };
 
+            menuBtn.onmouseenter = () => {
+                document.querySelectorAll('.card-menu-dropdown').forEach(el => {
+                    if (el !== dropdown) el.classList.add('hidden');
+                });
+                dropdown.classList.remove('hidden');
+            };
+            actionWrapper.onmouseleave = () => {
+                setTimeout(() => {
+                    if (!actionWrapper.matches(':hover')) dropdown.classList.add('hidden');
+                }, 120);
+            };
             dropdown.querySelector('.menu-edit').onclick = (e) => {
                 e.stopPropagation();
                 dropdown.classList.add('hidden');
@@ -2283,26 +2298,15 @@ const HTML_CONTENT = `
                 dropdown.classList.add('hidden');
                 removeCard(card);
             };
+            dropdown.querySelector('.menu-private').onclick = (e) => {
+                e.stopPropagation();
+                dropdown.classList.add('hidden');
+                toggleCardPrivate(card);
+            };
 
             actionWrapper.appendChild(menuBtn);
             actionWrapper.appendChild(dropdown);
             card.appendChild(actionWrapper);
-
-            const privBtn = document.createElement('button');
-            const privStyle = isAppLayout
-                ? 'top-[-4px] left-[-4px] w-6 h-6 rounded-full bg-secondary dark:bg-muted text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground'
-                : 'top-2 left-2 w-7 h-7 rounded-lg text-muted-foreground hover:text-muted-foreground dark:hover:text-base-foreground hover:bg-[color-mix(in_oklab,var(--muted)_80%,transparent)] dark:hover:bg-[color-mix(in_oklab,var(--muted)_60%,transparent)] backdrop-blur-sm';
-            privBtn.className = 'absolute ' + privStyle + ' z-30 flex items-center justify-center transition-all duration-200';
-            privBtn.title = link.isPrivate ? '点击设为公开' : '点击设为私密';
-            privBtn.innerHTML = link.isPrivate
-                ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>'
-                : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 11V7a4.5 4.5 0 0 1 8.8-1.4"></path></svg>';
-            privBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-            privBtn.onclick = (e) => {
-                e.stopPropagation();
-                toggleCardPrivate(card);
-            };
-            card.appendChild(privBtn);
         }
 
         if (!isEditMode) {
