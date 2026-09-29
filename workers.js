@@ -1678,12 +1678,14 @@ const HTML_CONTENT = `
                 const addCardPlaceholder = document.createElement('div');
                 const sizeClasses = isAppLayout 
                     ? 'w-16 h-16 rounded-[1.2rem] mx-auto' 
-                    : 'min-h-[100px] p-4 rounded-[var(--radius-2xl)] w-full';
+                    : (isCompactActive()
+                        ? 'min-h-[44px] p-1.5 rounded-[var(--radius-2xl)] w-full'
+                        : 'min-h-[100px] p-4 rounded-[var(--radius-2xl)] w-full');
                 
                 addCardPlaceholder.className = \`add-card-placeholder group flex flex-col h-full w-full \${sizeClasses} rounded-[var(--radius-2xl)] border-2 border-dashed border-line dark:border-line hover:border-accent dark:hover:border-accent hover:bg-[color-mix(in_oklab,var(--accent)_50%,transparent)] dark:hover:bg-soft transition-all cursor-pointer flex items-center justify-center\`;
                 addCardPlaceholder.innerHTML = \`
-                    <div class="w-10 h-10 rounded-full bg-muted dark:bg-muted group-hover:bg-soft dark:group-hover:bg-soft flex items-center justify-center transition-colors pointer-events-none">
-                        <svg class="w-6 h-6 text-muted-foreground group-hover:text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <div class="\${isCompactActive() ? 'w-6 h-6' : 'w-10 h-10'} rounded-full bg-muted dark:bg-muted group-hover:bg-soft dark:group-hover:bg-soft flex items-center justify-center transition-colors pointer-events-none">
+                        <svg class="\${isCompactActive() ? 'w-3.5 h-3.5' : 'w-6 h-6'} text-muted-foreground group-hover:text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                     </div>
                 \`;
                 
