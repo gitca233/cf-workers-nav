@@ -479,12 +479,13 @@ const HTML_CONTENT = `
                         }
                         if (_css[_f]) _on.push(_f);
                     }
+                    var _text = '';
                     if (_on.indexOf('plain') >= 0) {
                         _on = ['plain'];
-                        for (var _k in _css) _css[_k] = '';
+                        for (var _k in _css) _text += _css[_k];
+                    } else {
+                        for (var _j = 0; _j < _on.length; _j++) { if (_css[_on[_j]]) _text += _css[_on[_j]]; }
                     }
-                    var _text = '';
-                    for (var _j = 0; _j < _on.length; _j++) { if (_css[_on[_j]]) _text += _css[_on[_j]]; }
                     var _st = document.createElement('style');
                     _st.id = '__perfprobe';
                     _st.textContent = _text;
