@@ -2287,6 +2287,22 @@ const HTML_CONTENT = `
             actionWrapper.appendChild(menuBtn);
             actionWrapper.appendChild(dropdown);
             card.appendChild(actionWrapper);
+
+            const privBtn = document.createElement('button');
+            const privStyle = isAppLayout
+                ? 'top-[-4px] left-[-4px] w-6 h-6 rounded-full bg-secondary dark:bg-muted text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground'
+                : 'top-2 left-2 w-7 h-7 rounded-lg text-muted-foreground hover:text-muted-foreground dark:hover:text-base-foreground hover:bg-[color-mix(in_oklab,var(--muted)_80%,transparent)] dark:hover:bg-[color-mix(in_oklab,var(--muted)_60%,transparent)] backdrop-blur-sm';
+            privBtn.className = 'absolute ' + privStyle + ' z-30 flex items-center justify-center transition-all duration-200';
+            privBtn.title = link.isPrivate ? '点击设为公开' : '点击设为私密';
+            privBtn.innerHTML = link.isPrivate
+                ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>'
+                : '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 11V7a4.5 4.5 0 0 1 8.8-1.4"></path></svg>';
+            privBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+            privBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleCardPrivate(card);
+            };
+            card.appendChild(privBtn);
         }
 
         if (!isEditMode) {
@@ -2514,6 +2530,23 @@ const HTML_CONTENT = `
         }
         card.remove();
         await saveLinks();
+    }
+
+    // 编辑态快捷切换单张卡片隐私模式：原地替换卡片并保存
+    async function toggleCardPrivate(card) {
+        if (!await validateTokenOrRedirect()) return;
+        const url = card.getAttribute('data-url');
+        for (const cat in categories) {
+            const idx = categories[cat].links.findIndex(l => l.url === url);
+            if (idx !== -1) {
+                const link = categories[cat].links[idx];
+                link.isPrivate = !link.isPrivate;
+                const fresh = createCard(link);
+                if (card.parentNode) card.parentNode.replaceChild(fresh, card);
+                await saveLinks();
+                return;
+            }
+        }
     }
 
     // --- 拖拽辅助函数 ---
