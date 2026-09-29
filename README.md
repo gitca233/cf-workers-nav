@@ -9,30 +9,52 @@
 
 📋 轻松部署的个人导航页 
 
-> 一个部署在CF上的轻量化导航页面。
-> 集成了书签管理、图标自动获取、拖拽排序、私密链接保护等功能， Worker 单文件，方便部署。
+> 一个部署在 Cloudflare Workers 上的轻量化导航页面。
+> 集成书签管理、图标自动获取、拖拽排序、私密链接保护、**主题换肤**等功能。
 
 ## ✨ 主要特性
 
 *   **⚡️ Serverless 架构**：完全运行在 Cloudflare Workers 上。
 *   **💾 KV 存储**：数据存储在 Cloudflare KV 中。
-*   **🎨 简洁的UI**：基于 Tailwind CSS，支持**深色模式**自动/手动切换，响应式设计适配 PC 与移动端。
+*   **🎨 主题换肤**：内置 9 款主题 + 无限扩展的 tweakcn 社区主题，支持管理员一键发布全局主题。
+*   **🌗 深色模式**：手动开关 + 跟随设备系统设置，每个访客的偏好独立保存在本地。
 *   **🖱️ 拖拽排序**：支持 PC 端鼠标拖拽和移动端长按拖拽来整理分类与卡片顺序。
 *   **🔒 私密保护**：支持设置“私密链接”，仅在管理员登录后可见。
 *   **📂 数据管理**：支持在线添加/编辑/删除链接，支持导入 Chrome / Edge 的 HTML 书签，支持 JSON 格式的数据导入/导出及自动备份。
 *   **🔍 聚合搜索**：内置多款搜索引擎（Google, Bing, Baidu）及站内快捷搜索。
+*   **📱 响应式设计**：卡片视图 / APP 视图两种布局自由切换，适配 PC 与移动端。
+
+## 🎨 主题换肤
+
+入口：右上角「设置 → 主题皮肤」。**访客也能换肤**（仅对自己生效，保存在浏览器本地），**管理员**登录后切换主题会发布为**全局主题**，所有访客打开页面即是这套配色。
+
+### 自定义主题（tweakcn 社区）
+
+内置库看腻了？在弹窗底部的输入框粘贴 [tweakcn](https://tweakcn.com) 社区主题的 **ID 或完整链接**（`themes/xxx`），点击「应用」即可换肤。[更多主题 ↗](https://tweakcn.com/community)
+
+### 主题 JSON 导出 / 导入
+
+弹窗底部提供「导入 / 导出主题」：
+
+*   **导出**：将当前自定义主题一键复制为 JSON 或下载文件，方便备份与分享。
+*   **导入**：粘贴 JSON 文本或选择本地 `.json` 文件即可应用；自动兼容三种格式——本站导出格式、tweakcn 的 `{name, cssVars}`、裸 `{light, dark, theme}` 配色数据。
+*   **安全与回退**：导入前会做体积上限、结构白名单与 CSS 值消毒校验，并自动保存快照，可通过「回退上一套」随时恢复。
+
+![主题选择面板](images/theme-panel.webp)
+
+
 
 ## 界面预览
 
-### 浏览视图
-| Card View | APP View |
-|-|-|
-| ![Desktop Preview](https://github.com/user-attachments/assets/3420ba4a-af78-4527-b502-eb2a5b3cd735)| ![APP View](https://github.com/user-attachments/assets/7ea6df52-e9da-4922-9f79-40bc40cf6f5e)|
+### 卡片视图
+| default | claude |
+|---|---|
+| ![default](images/default.webp) | ![claude](images/claude.webp) |
 
-### 编辑模式视图
-| Card View | APP View |
-|-|-|
-| ![Edit Mode](https://github.com/user-attachments/assets/a49974cd-ed41-47c8-816e-177318b14895)| ![APP View](https://github.com/user-attachments/assets/3ef5bf17-67b5-43ea-9295-2404cb4cd5b9)|
+### APP视图
+| amethyst-haze | graphite |
+|---|---|
+| ![amethyst-haze](images/app_amethyst-haze.webp) | ![graphite](images/app_edit_graphite.webp) |
 
 
 
@@ -45,54 +67,43 @@
 
 #### 部署步骤
 
-1. 登录 [Cloudflare](https://www.cloudflare.com):
-   - 创建workers，复制仓库里workers.js的代码，然后点击部署
+1. **登录 [Cloudflare](https://www.cloudflare.com)** 创建 Worker：
+   - 复制仓库里 `workers.js` 的代码，粘贴进 Worker 编辑器，点击部署。
 
-2. 创建KV存储:
-   - 新建一个名为CARD_ORDER的KV存储，用于存储数据
+2. **创建 KV 存储**：
+   - 新建一个名为 `CARD_ORDER` 的 KV 命名空间，用于存储数据。
 
-3. 添加环境变量:
-   - ADMIN_PASSWORD，管理员登录密码
-   - JWT_SECRET，用于加密 Token，输入点随机字符串即可 （如果是老版本更新的请一定要添加，否则会出错）
+3. **绑定 KV 命名空间**：
+   - 在 Worker 的「设置 → 变量」中添加绑定，变量名称填 `CARD_ORDER`，绑定到上一步创建的 `CARD_ORDER` 命名空间。
 
-4. 绑定KV命名空间
-   - 变量名称为CARD_ORDER，KV选择之前创建好的CARD_ORDER
+4. **配置环境变量 / 设置**：
+   - 必填与选填的各项配置见下方表格。
 
-5. 添加域名
+5. **添加域名**：
+   - 若需自定义域名，在 Worker 的「设置 → 域和路由」中添加自定义域或用 `*.workers.dev` 子域。
 
-</details>
+<br/>
 
-## 近期更新
+#### 环境变量说明
 
-<details>
-<summary>点击查看/隐藏更新日志</summary>
+> 表中标记了「必填」与「可选」；未配置选填项时将使用默认值。
 
-### 2026/09/14
-- ✅ 增加一键测活(仅作参考)
-### 2026/09/13
-- ✅ 支持Chrome / Edge 导出的书签HTML
-- ✅ 优化页面渲染、站内搜索及事件交互，去除内嵌脚本
-### 2025/12/10
-- ✅ UI重构
-### 2025/06/3
-- ✅ 支持隐藏分类
-- ✅ 数据格式调整，兼容原有数据，为了防止万一请提前备份数据
-### 2025/05/09
-- ✅ 调整登录UI，支持偏好保存（默认搜索及主题）
-- ✅ 增加搜索本站
-- ✅ 同步作者修复备份数据认证问题
-### 2025/04/25
-**在原项目基础上做了以下调整**
-- ✅稍微调整UI，优化移动端显示
-- ✅卡片增加简介和自定义icon，增加卡片编辑功能
-- ✅分类支持改名和顺序调整
-- ✅增加导出数据
-- ✅token调整为JWT
-- ✅数据去掉links，只保留categories，减少数据量
-- ✅其他一些调整
+| 变量名 | 必填 | 说明 | 默认值 |
+|---|---|---|---|
+| `ADMIN_PASSWORD` | ✅ 必填 | 管理员登录密码，至少 **8 个字符** | 无 |
+| `JWT_SECRET` | ✅ 必填 | 用于加密 Token 的密钥，建议为 **≥32 字符** 的随机字符串 | 无 |
+| `DEFAULT_USER` | ⬜ 可选 | 默认用户标识| `testUser` |
+| `ALLOWED_ORIGINS` | ⬜ 可选 | 允许跨域访问的来源，多个用英文逗号分隔 | 空（不限制） |
+| `ICON_API` | ⬜ 可选 | 图标API地址 |已内置xinac|
+| `PREFER_ICON_API` | ⬜ 可选 | 是否优先使用图标API | `true` |
+
+> **注意（老版本升级提醒）：**
+> - 旧版本如果**未配置 `JWT_SECRET`**，或配置的 `JWT_SECRET` **小于 32 个字符**，必须重新配置一个 **≥32 字符** 的随机字符串，否则 Worker 会因配置校验失败（`JWT_SECRET 未配置或强度不足`）而无法正常工作。
+> - 旧版本如果 **`ADMIN_PASSWORD` 小于 8 个字符**，请一并更新为**至少 8 个字符**的新密码，否则同样会触发配置校验失败。
+> - 修改后需重新部署（或点击「保存并部署」）使配置生效。
 
 </details>
 
 ## 🙏 致谢
 
-特别感谢 **[Cloudflare](https://www.cloudflare.com/)** 、 **[Tailwind CSS](https://tailwindcss.com/)** 、 **[hmhm2022](https://github.com/hmhm2022)**、 **[xinac](https://api.xinac.net/)**。
+特别感谢 **[Cloudflare](https://www.cloudflare.com/)** 、 **[Tailwind CSS](https://tailwindcss.com/)** 、 **[tweakcn](https://tweakcn.com/)**（主题库与社区主题）、 **[hmhm2022](https://github.com/hmhm2022)**、 **[xinac](https://api.xinac.net/)**。
